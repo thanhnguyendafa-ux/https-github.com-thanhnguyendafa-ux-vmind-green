@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vmind - Vocabulary Learning</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideInUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+    @keyframes pulse-bg {
+      0%, 100% { background-color: rgba(22, 163, 74, 0.2); }
+      50% { background-color: rgba(22, 163, 74, 0.4); }
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      75% { transform: translateX(5px); }
+    }
+    @keyframes ai-glow {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0); }
+        50% { box-shadow: 0 0 8px 2px rgba(6, 182, 212, 0.4); }
+    }
+    .animate-fadeIn { animation: fadeIn 0.5s ease-out forwards; }
+    .animate-slideInUp { animation: slideInUp 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
+    .animate-pulse-bg { animation: pulse-bg 2s infinite; }
+    .animate-shake { animation: shake 0.3s ease-in-out; }
+    .animate-ai-glow { animation: ai-glow 2.5s infinite; }
+
+    .perspective-1000 { perspective: 1000px; }
+    .transform-style-3d { transform-style: preserve-3d; }
+
+    @keyframes card-flip-out-next {
+      from { transform: rotateY(0deg); opacity: 1; }
+      to { transform: rotateY(-90deg); opacity: 0; }
+    }
+    .animate-card-flip-out-next { animation: card-flip-out-next 0.15s ease-in forwards; }
+
+    @keyframes card-flip-in-next {
+      from { transform: rotateY(90deg); opacity: 0; }
+      to { transform: rotateY(0deg); opacity: 1; }
+    }
+    .animate-card-flip-in-next { animation: card-flip-in-next 0.15s ease-out forwards; }
+
+    @keyframes card-flip-out-prev {
+      from { transform: rotateY(0deg); opacity: 1; }
+      to { transform: rotateY(90deg); opacity: 0; }
+    }
+    .animate-card-flip-out-prev { animation: card-flip-out-prev 0.15s ease-in forwards; }
+
+    @keyframes card-flip-in-prev {
+      from { transform: rotateY(-90deg); opacity: 0; }
+      to { transform: rotateY(0deg); opacity: 1; }
+    }
+    .animate-card-flip-in-prev { animation: card-flip-in-prev 0.15s ease-out forwards; }
+    
+    /* Card flip transition */
+    .card-container.flipped .card-flip {
+      transform: rotateY(180deg);
+    }
+    .card-flip {
+      transition: transform 0.6s;
+      transform-style: preserve-3d;
+    }
+    .card-front, .card-back {
+      -webkit-backface-visibility: hidden; /* Safari */
+      backface-visibility: hidden;
+    }
+    .card-back {
+      transform: rotateY(180deg);
+    }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.45.0"
+  }
+}
+</script>
+</head>
+<body class="antialiased">
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
