@@ -229,7 +229,8 @@ function App() {
 
   const handleCreateTable = (name: string, columnsStr: string) => {
     // FIX: Replaced .filter(s => s) with a more explicit .filter(s => s.length > 0) to ensure only non-empty strings are included and to resolve potential TypeScript type inference issues where the array type might be misinterpreted.
-    const columnNames = columnsStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    // FIX: Explicitly type map and filter arguments to resolve type inference error.
+    const columnNames = columnsStr.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
     if (columnNames.length === 0) {
         alert("Please provide at least one column name.");
         return;

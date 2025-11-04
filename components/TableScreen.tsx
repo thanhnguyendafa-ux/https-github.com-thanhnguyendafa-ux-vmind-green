@@ -1623,7 +1623,8 @@ const TableScreen: React.FC<TableScreenProps> = ({ table, onBack, onUpdateTable,
         ...table,
         description,
         // FIX: Replaced .filter(t => t) with a more explicit .filter(t => t.length > 0) to prevent potential TypeScript type inference issues and ensure only non-empty tags are processed.
-        tags: tags.split(',').map(t => t.trim()).filter(t => t.length > 0),
+        // FIX: Explicitly type map and filter arguments to resolve type inference error.
+        tags: tags.split(',').map((t: string) => t.trim()).filter((t: string) => t.length > 0),
         isPublic: true,
     };
     onUpdateTable(updatedTable);

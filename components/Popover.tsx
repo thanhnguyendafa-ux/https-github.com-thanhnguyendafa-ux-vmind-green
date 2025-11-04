@@ -1,6 +1,5 @@
 
-import React, 'react';
-import { useState, useRef, useEffect, ReactNode } from 'react';
+import React, { useState, useRef, useEffect, ReactNode } from 'react';
 
 interface PopoverProps {
   trigger: ReactNode;
