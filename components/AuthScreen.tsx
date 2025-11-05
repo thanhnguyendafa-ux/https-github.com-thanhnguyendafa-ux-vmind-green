@@ -1,14 +1,10 @@
-
-
 import * as React from 'react';
 import { supabase } from '../services/supabaseClient';
 import Icon from './Icon';
+import { useAppContext } from '../context/AppContext';
 
-interface AuthScreenProps {
-  onGuestLogin: () => void;
-}
-
-const AuthScreen: React.FC<AuthScreenProps> = ({ onGuestLogin }) => {
+const AuthScreen: React.FC = () => {
+  const { handleGuestLogin } = useAppContext();
   const [isLogin, setIsLogin] = React.useState(true);
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
@@ -93,7 +89,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onGuestLogin }) => {
         </div>
 
         <div className="text-center mt-6">
-            <button onClick={onGuestLogin} className="text-sm text-slate-500 dark:text-slate-400 hover:underline">
+            <button onClick={handleGuestLogin} className="text-sm text-slate-500 dark:text-slate-400 hover:underline">
                 Or continue as a guest
             </button>
         </div>

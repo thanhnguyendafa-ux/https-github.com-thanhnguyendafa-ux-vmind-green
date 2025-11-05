@@ -1,18 +1,14 @@
-
-
-
 import * as React from 'react';
 import { Badge, UserStats } from '../types';
 import Icon from './Icon';
-
-interface RewardsScreenProps {
-  stats: UserStats;
-  allBadges: Badge[];
-}
+import { useAppContext } from '../context/AppContext';
+import { BADGES } from '../constants';
 
 const XP_PER_LEVEL = 1000;
 
-const RewardsScreen: React.FC<RewardsScreenProps> = ({ stats, allBadges }) => {
+const RewardsScreen: React.FC = () => {
+  const { stats } = useAppContext();
+  const allBadges = BADGES;
 
   const getProgress = (badge: Badge): { current: number, target: number, percentage: number } => {
     const target = badge.value;

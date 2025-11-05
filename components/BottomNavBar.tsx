@@ -1,25 +1,20 @@
-
-
 import React from 'react';
 import { Screen } from '../types';
 import Icon from './Icon';
+import { useAppContext } from '../context/AppContext';
 
-interface BottomNavBarProps {
-  currentScreen: Screen;
-  setCurrentScreen: (screen: Screen) => void;
-}
-
-const NavItem: React.FC<{
+interface NavItemProps {
   screen: Screen;
   label: string;
   icon: string;
-  currentScreen: Screen;
-  onClick: (screen: Screen) => void;
-}> = ({ screen, label, icon, currentScreen, onClick }) => {
+}
+
+const NavItem: React.FC<NavItemProps> = ({ screen, label, icon }) => {
+  const { currentScreen, setCurrentScreen } = useAppContext();
   const isActive = currentScreen === screen;
   return (
     <button
-      onClick={() => onClick(screen)}
+      onClick={() => setCurrentScreen(screen)}
       className={`flex flex-col items-center justify-center w-full pt-2 pb-1 transition-colors duration-200 ${
         isActive ? 'text-emerald-500' : 'text-slate-500 dark:text-slate-400 hover:text-emerald-500'
       }`}
@@ -30,7 +25,7 @@ const NavItem: React.FC<{
   );
 };
 
-const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentScreen, setCurrentScreen }) => {
+const BottomNavBar: React.FC = () => {
   const navItems = [
     { screen: Screen.Home, label: 'Home', icon: 'compass' },
     { screen: Screen.Tables, label: 'Tables', icon: 'table-cells' },
@@ -49,8 +44,6 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ currentScreen, setCurrentSc
             screen={item.screen}
             label={item.label}
             icon={item.icon}
-            currentScreen={currentScreen}
-            onClick={setCurrentScreen}
           />
         ))}
       </nav>

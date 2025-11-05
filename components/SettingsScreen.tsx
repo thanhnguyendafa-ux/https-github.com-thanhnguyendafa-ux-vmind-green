@@ -1,18 +1,17 @@
-
 import React from 'react';
 import Icon from './Icon';
-import { Theme, AppSettings } from '../types';
+import { useAppContext } from '../context/AppContext';
 
-interface SettingsScreenProps {
-  onLogout: () => void;
-  onToggleTheme: () => void;
-  theme: Theme;
-  isGuest: boolean;
-  settings: AppSettings;
-  onUpdateSettings: (newSettings: Partial<AppSettings>) => void;
-}
+const SettingsScreen: React.FC = () => {
+  const { 
+    handleLogout, 
+    handleToggleTheme, 
+    theme, 
+    isGuest, 
+    settings, 
+    handleUpdateSettings 
+  } = useAppContext();
 
-const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout, onToggleTheme, theme, isGuest, settings, onUpdateSettings }) => {
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto animate-fadeIn">
       <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-6">Settings</h1>
@@ -26,7 +25,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout, onToggleTheme
           ) : (
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500 dark:text-slate-400">You are logged in.</p>
-              <button onClick={onLogout} className="bg-red-500 text-white font-semibold px-4 py-2 rounded-md hover:bg-red-600 transition-colors text-sm">
+              <button onClick={handleLogout} className="bg-red-500 text-white font-semibold px-4 py-2 rounded-md hover:bg-red-600 transition-colors text-sm">
                 Log Out
               </button>
             </div>
@@ -38,7 +37,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout, onToggleTheme
           <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Appearance</h2>
           <div className="flex items-center justify-between">
             <p className="text-sm text-slate-500 dark:text-slate-400">Theme</p>
-            <button onClick={onToggleTheme} className="flex items-center gap-2 bg-slate-200 dark:bg-slate-700 px-3 py-1.5 rounded-full font-semibold text-sm">
+            <button onClick={handleToggleTheme} className="flex items-center gap-2 bg-slate-200 dark:bg-slate-700 px-3 py-1.5 rounded-full font-semibold text-sm">
               <Icon name={theme === 'dark' ? 'moon' : 'sun'} className="w-5 h-5" />
               <span>{theme === 'dark' ? 'Dark' : 'Light'}</span>
             </button>
@@ -53,13 +52,13 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout, onToggleTheme
             <p className="text-sm text-slate-500 dark:text-slate-400">Journal Logging Mode</p>
             <div className="flex rounded-full bg-slate-200 dark:bg-slate-700 p-1 text-sm font-semibold">
               <button 
-                onClick={() => onUpdateSettings({ journalMode: 'manual' })}
+                onClick={() => handleUpdateSettings({ journalMode: 'manual' })}
                 className={`px-3 py-1 rounded-full ${settings.journalMode === 'manual' ? 'bg-white dark:bg-slate-600 shadow' : ''}`}
               >
                 Manual
               </button>
               <button 
-                onClick={() => onUpdateSettings({ journalMode: 'automatic' })}
+                onClick={() => handleUpdateSettings({ journalMode: 'automatic' })}
                 className={`px-3 py-1 rounded-full ${settings.journalMode === 'automatic' ? 'bg-white dark:bg-slate-600 shadow' : ''}`}
               >
                 Automatic

@@ -1,21 +1,16 @@
 import React from 'react';
 import Icon from './Icon';
+import { useAppContext } from '../context/AppContext';
+import { Screen } from '../types';
 
-interface VmindScreenProps {
-  onBack: () => void;
-  onStartStudySession: () => void;
-  onNavigateToReading: () => void;
-  onNavigateToJournal: () => void;
-  onNavigateToFlashcards: () => void; // New prop
-}
+const VmindScreen: React.FC = () => {
+  const { setCurrentScreen } = useAppContext();
 
-const VmindScreen: React.FC<VmindScreenProps> = ({ onBack, onStartStudySession, onNavigateToReading, onNavigateToJournal, onNavigateToFlashcards }) => {
-  
   const learningModes = [
-    { name: 'Study Session', icon: 'brain', description: 'Customizable quiz with various question types.', enabled: true, action: onStartStudySession },
-    { name: 'Reading Space', icon: 'file-text', description: 'Extract vocabulary from texts and notes.', enabled: true, action: onNavigateToReading },
-    { name: 'Flashcards', icon: 'credit-card', description: 'Classic review with Spaced Repetition.', enabled: true, action: onNavigateToFlashcards },
-    { name: 'Journal', icon: 'pencil', description: 'View your automated study log.', enabled: true, action: onNavigateToJournal },
+    { name: 'Study Session', icon: 'brain', description: 'Customizable quiz with various question types.', enabled: true, action: () => setCurrentScreen(Screen.StudySetup) },
+    { name: 'Reading Space', icon: 'file-text', description: 'Extract vocabulary from texts and notes.', enabled: true, action: () => setCurrentScreen(Screen.Reading) },
+    { name: 'Flashcards', icon: 'credit-card', description: 'Classic review with Spaced Repetition.', enabled: true, action: () => setCurrentScreen(Screen.Flashcards) },
+    { name: 'Journal', icon: 'pencil', description: 'View your automated study log.', enabled: true, action: () => setCurrentScreen(Screen.Journal) },
     { name: 'Sentence Scramble', icon: 'table-cells', description: 'Unscramble sentence fragments to test recall.', enabled: false },
     { name: 'Dictation', icon: 'play', description: 'Listen to audio and type what you hear.', enabled: false },
   ];

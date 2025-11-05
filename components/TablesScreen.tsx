@@ -4,6 +4,7 @@ import Icon from './Icon';
 import Modal from './Modal';
 import Popover from './Popover';
 import ConfirmationModal from './ConfirmationModal';
+import { useAppContext } from '../context/AppContext';
 
 const TableCard: React.FC<{table: Table; onDelete: () => void; onSelect: (id: string) => void; onMove: (id: string) => void}> = ({ table, onDelete, onSelect, onMove }) => {
     
@@ -50,56 +51,37 @@ const FolderCard: React.FC<{folder: Folder; tableCount: number; onSelect: () => 
 };
 
 // --- Modals ---
-const CreateTableModal: React.FC<{isOpen: boolean; onClose: () => void; onCreate: (name: string, columns: string) => void}> = ({ isOpen, onClose, onCreate }) => {
+const CreateTableModal: React.FC<{isOpen: boolean; onClose: () => void;}> = ({ isOpen, onClose }) => {
+    const { handleCreateTable } = useAppContext();
     const [name, setName] = useState('');
     const [columns, setColumns] = useState('');
     const [error, setError] = useState('');
     const [step, setStep] = useState<'form' | 'confirm'>('form');
     const [duplicateInfo, setDuplicateInfo] = useState<{ name: string; originalColumns: string; uniqueColumns: string; } | null>(null);
 
-    // Reset state when modal is opened/closed
     useEffect(() => {
         if (!isOpen) {
-            // Give animations time to finish before reset
-            setTimeout(() => {
-                setName('');
-                setColumns('');
-                setError('');
-                setStep('form');
-                setDuplicateInfo(null);
-            }, 300);
+            setTimeout(() => { setName(''); setColumns(''); setError(''); setStep('form'); setDuplicateInfo(null); }, 300);
         }
     }, [isOpen]);
 
-    const handleCloseAndReset = () => {
-        onClose();
-    };
+    const handleCloseAndReset = () => { onClose(); };
 
     const handleSubmit = () => {
         setError('');
         const trimmedName = name.trim();
-        if (!trimmedName) {
-            setError('Table name is required.');
-            return;
-        }
+        if (!trimmedName) { setError('Table name is required.'); return; }
         const trimmedColumns = columns.trim();
-        if (!trimmedColumns) {
-            setError('Please define at least one column.');
-            return;
-        }
+        if (!trimmedColumns) { setError('Please define at least one column.'); return; }
 
         const columnNames = trimmedColumns.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
         const uniqueColumnNames = [...new Set(columnNames)];
 
         if (uniqueColumnNames.length < columnNames.length) {
-            setDuplicateInfo({
-                name: trimmedName,
-                originalColumns: columnNames.join(', '),
-                uniqueColumns: uniqueColumnNames.join(', '),
-            });
+            setDuplicateInfo({ name: trimmedName, originalColumns: columnNames.join(', '), uniqueColumns: uniqueColumnNames.join(', '), });
             setStep('confirm');
         } else {
-            onCreate(trimmedName, trimmedColumns);
+            handleCreateTable(trimmedName, trimmedColumns);
             handleCloseAndReset();
         }
     };
@@ -107,7 +89,7 @@ const CreateTableModal: React.FC<{isOpen: boolean; onClose: () => void; onCreate
     const handleConfirm = (keepDuplicates: boolean) => {
         if (duplicateInfo) {
             const finalColumns = keepDuplicates ? duplicateInfo.originalColumns : duplicateInfo.uniqueColumns;
-            onCreate(duplicateInfo.name, finalColumns);
+            handleCreateTable(duplicateInfo.name, finalColumns);
         }
         handleCloseAndReset();
     };
@@ -137,40 +119,27 @@ const CreateTableModal: React.FC<{isOpen: boolean; onClose: () => void; onCreate
                 Your column list contains duplicate names. How would you like to proceed?
             </p>
             <div className="flex flex-col gap-3">
-                <button 
-                    onClick={() => handleConfirm(false)} 
-                    className="w-full bg-emerald-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-emerald-700 transition-colors"
-                >
+                <button onClick={() => handleConfirm(false)} className="w-full bg-emerald-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-emerald-700 transition-colors">
                     Remove Duplicates
                 </button>
-                <button 
-                    onClick={() => handleConfirm(true)}
-                    className="w-full bg-white dark:bg-slate-700 text-slate-800 dark:text-white font-semibold py-2 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-600 border border-slate-300 dark:border-slate-600 transition-colors"
-                >
+                <button onClick={() => handleConfirm(true)} className="w-full bg-white dark:bg-slate-700 text-slate-800 dark:text-white font-semibold py-2 px-4 rounded-md hover:bg-slate-50 dark:hover:bg-slate-600 border border-slate-300 dark:border-slate-600 transition-colors">
                     Keep Duplicates
                 </button>
             </div>
         </div>
     );
     
-    return (
-        <Modal 
-            isOpen={isOpen} 
-            onClose={handleCloseAndReset} 
-            title={step === 'form' ? "Create New Table" : "Duplicate Columns Found"}
-        >
-            {step === 'form' ? renderForm() : renderConfirm()}
-        </Modal>
-    );
+    return (<Modal isOpen={isOpen} onClose={handleCloseAndReset} title={step === 'form' ? "Create New Table" : "Duplicate Columns Found"}>{step === 'form' ? renderForm() : renderConfirm()}</Modal>);
 };
 
-const CreateFolderModal: React.FC<{isOpen: boolean; onClose: () => void; onCreate: (name: string) => void}> = ({ isOpen, onClose, onCreate }) => {
+const CreateFolderModal: React.FC<{isOpen: boolean; onClose: () => void;}> = ({ isOpen, onClose }) => {
+    const { handleCreateFolder } = useAppContext();
     const [name, setName] = useState('');
     const [error, setError] = useState('');
     
     const handleSubmit = () => {
         if (name.trim()) {
-            onCreate(name.trim());
+            handleCreateFolder(name.trim());
             setName('');
             setError('');
             onClose();
@@ -185,15 +154,7 @@ const CreateFolderModal: React.FC<{isOpen: boolean; onClose: () => void; onCreat
                 <div className="flex flex-col gap-4">
                     <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Folder Name</label>
-                        <input 
-                            type="text" 
-                            value={name} 
-                            onChange={e => {
-                                setName(e.target.value);
-                                if (error) setError('');
-                            }} 
-                            placeholder="e.g., Language Studies" 
-                            className="w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md px-3 py-2 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        <input type="text" value={name} onChange={e => { setName(e.target.value); if (error) setError(''); }} placeholder="e.g., Language Studies" className="w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md px-3 py-2 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                         {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
                     </div>
                     <button onClick={handleSubmit} className="bg-emerald-600 text-white font-semibold px-4 py-2 rounded-md hover:bg-emerald-700 transition-colors w-full">
@@ -205,15 +166,11 @@ const CreateFolderModal: React.FC<{isOpen: boolean; onClose: () => void; onCreat
     );
 };
 
-const ExportModal: React.FC<{isOpen: boolean; onClose: () => void; tables: Table[]}> = ({ isOpen, onClose, tables }) => {
+const ExportModal: React.FC<{isOpen: boolean; onClose: () => void;}> = ({ isOpen, onClose }) => {
+    const { tables } = useAppContext();
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-    const handleToggle = (id: string) => {
-        const newSet = new Set(selectedIds);
-        if (newSet.has(id)) newSet.delete(id);
-        else newSet.add(id);
-        setSelectedIds(newSet);
-    };
+    const handleToggle = (id: string) => { const newSet = new Set(selectedIds); if (newSet.has(id)) newSet.delete(id); else newSet.add(id); setSelectedIds(newSet); };
     
     const handleExport = (format: 'json' | 'csv') => {
         if (format === 'json') {
@@ -266,7 +223,8 @@ const ExportModal: React.FC<{isOpen: boolean; onClose: () => void; tables: Table
 };
 
 type ParsedCsv = { headers: string[], rows: (string[])[] };
-const ImportModal: React.FC<{isOpen: boolean; onClose: () => void; tables: Table[]; onImport: (tables: Table[], appendToTableId?: string) => void; onShowToast: (message: string, type: 'success' | 'error') => void;}> = ({ isOpen, onClose, tables, onImport, onShowToast }) => {
+const ImportModal: React.FC<{isOpen: boolean; onClose: () => void;}> = ({ isOpen, onClose }) => {
+    const { tables, handleImportTables, showToast } = useAppContext();
     const [step, setStep] = useState(1);
     const [file, setFile] = useState<File | null>(null);
     const [parsedCsv, setParsedCsv] = useState<ParsedCsv | null>(null);
@@ -275,27 +233,21 @@ const ImportModal: React.FC<{isOpen: boolean; onClose: () => void; tables: Table
     const [appendTableId, setAppendTableId] = useState('');
     const [columnMap, setColumnMap] = useState<{[key: number]: string}>({});
 
-    const reset = () => {
-        setStep(1); setFile(null); setParsedCsv(null); setDestination('new');
-        setNewTableName(''); setAppendTableId(''); setColumnMap({});
-    };
+    const reset = () => { setStep(1); setFile(null); setParsedCsv(null); setDestination('new'); setNewTableName(''); setAppendTableId(''); setColumnMap({}); };
 
     const handleFile = async (selectedFile: File) => {
         setFile(selectedFile);
         if (selectedFile.type === 'application/json') {
             const text = await selectedFile.text();
             try {
-                const tables = JSON.parse(text);
-                if (Array.isArray(tables) && tables.every(t => t.id && t.name)) {
-                    onImport(tables);
-                    onShowToast(`Successfully imported ${tables.length} table(s).`, 'success');
+                const importedTables = JSON.parse(text);
+                if (Array.isArray(importedTables) && importedTables.every(t => t.id && t.name)) {
+                    handleImportTables(importedTables);
+                    showToast(`Successfully imported ${importedTables.length} table(s).`, 'success');
                     reset();
                     onClose();
                 } else { throw new Error("Invalid JSON file.")}
-            } catch (e) { 
-                onShowToast("Error parsing JSON file.", 'error');
-                alert("Error parsing JSON file.") 
-            }
+            } catch (e) { showToast("Error parsing JSON file.", 'error'); }
         } else {
              const reader = new FileReader();
              reader.onload = e => {
@@ -313,128 +265,41 @@ const ImportModal: React.FC<{isOpen: boolean; onClose: () => void; tables: Table
 
     const handleFinishImport = () => {
         if (!parsedCsv) return;
-
-        let tableToUpdate: Table | undefined;
         let finalRows: VocabRow[] = [];
-        let finalTable: Table | undefined;
-
-        const destColumns = destination === 'new' 
-            ? parsedCsv.headers.map((h, i) => ({ id: `col-import-${i}`, name: h }))
-            : tables.find(t => t.id === appendTableId)?.columns || [];
-        
+        const destColumns = destination === 'new' ? parsedCsv.headers.map((h, i) => ({ id: `col-import-${i}`, name: h })) : tables.find(t => t.id === appendTableId)?.columns || [];
         const effectiveMap: {[key: number]: string} = {};
-        if (destination === 'new') {
-            destColumns.forEach((c, i) => effectiveMap[i] = c.id);
-        } else {
-            Object.assign(effectiveMap, columnMap);
-        }
+        if (destination === 'new') { destColumns.forEach((c, i) => effectiveMap[i] = c.id); } else { Object.assign(effectiveMap, columnMap); }
 
         finalRows = parsedCsv.rows.map(row => {
             const cols: Record<string, string> = {};
-            row.forEach((cellValue, index) => {
-                const destColId = effectiveMap[index];
-                if (destColId && destColId !== 'ignore') {
-                    cols[destColId] = cellValue;
-                }
-            });
-            return {
-                id: `row-import-${Date.now()}-${Math.random()}`,
-                cols,
-                stats: { correct: 0, incorrect: 0, lastStudied: null, flashcardStatus: FlashcardStatus.New, flashcardEncounters: 0, isFlashcardReviewed: false, lastPracticeDate: null },
-            };
+            row.forEach((cellValue, index) => { const destColId = effectiveMap[index]; if (destColId && destColId !== 'ignore') { cols[destColId] = cellValue; } });
+            return { id: `row-import-${Date.now()}-${Math.random()}`, cols, stats: { correct: 0, incorrect: 0, lastStudied: null, flashcardStatus: FlashcardStatus.New, flashcardEncounters: 0, isFlashcardReviewed: false, lastPracticeDate: null }, };
         });
 
         if (destination === 'new') {
-            finalTable = {
-                id: `table-import-${Date.now()}`,
-                name: newTableName,
-                columns: destColumns,
-                rows: finalRows,
-                relations: []
-            };
-            onImport([finalTable]);
+            const finalTable = { id: `table-import-${Date.now()}`, name: newTableName, columns: destColumns, rows: finalRows, relations: [] };
+            handleImportTables([finalTable]);
         } else {
             const tableToAppend = { rows: finalRows } as Table;
-            onImport([tableToAppend], appendTableId);
+            handleImportTables([tableToAppend], appendTableId);
         }
 
-        onShowToast(`Successfully imported ${finalRows.length} rows.`, 'success');
+        showToast(`Successfully imported ${finalRows.length} rows.`, 'success');
         reset();
         onClose();
     };
     
     const renderStep = () => {
         switch (step) {
-            case 1: return (
-                <div className="p-6">
-                    <p className="text-center text-slate-500 dark:text-slate-400 mb-4 text-sm">Import from .json (backup) or .csv files.</p>
-                    <input type="file" onChange={e => e.target.files && handleFile(e.target.files[0])} accept=".json,.csv" className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
-                </div>
-            );
-            case 2: return (
-                 <div className="p-6">
-                    <h3 className="font-semibold mb-2 text-slate-700 dark:text-slate-200">Destination</h3>
-                    <div className="space-y-2">
-                        <label className="flex items-center gap-3 p-2 rounded-md has-[:checked]:bg-slate-100 dark:has-[:checked]:bg-slate-700">
-                            <input type="radio" name="dest" value="new" checked={destination === 'new'} onChange={() => setDestination('new')} />
-                            <span className="text-sm">Create new table</span>
-                        </label>
-                        {destination === 'new' && <input type="text" value={newTableName} onChange={e => setNewTableName(e.target.value)} className="w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md px-3 py-2 text-slate-800 dark:text-white ml-6 text-sm" />}
-                        <label className="flex items-center gap-3 p-2 rounded-md has-[:checked]:bg-slate-100 dark:has-[:checked]:bg-slate-700">
-                            <input type="radio" name="dest" value="append" checked={destination === 'append'} onChange={() => setDestination('append')} />
-                             <span className="text-sm">Append to existing table</span>
-                        </label>
-                        {destination === 'append' && <select value={appendTableId} onChange={e => setAppendTableId(e.target.value)} className="w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md px-3 py-2 text-slate-800 dark:text-white ml-6 text-sm"><option value="">Select table...</option>{tables.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
-                        {destination === 'append' && appendTableId && parsedCsv && (
-                            <div className="ml-6 mt-4">
-                                <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Map CSV Columns</h4>
-                                <div className="space-y-2 max-h-32 overflow-y-auto">
-                                    {parsedCsv.headers.map((header, index) => {
-                                        const targetTable = tables.find(t => t.id === appendTableId);
-                                        return (
-                                            <div key={index} className="grid grid-cols-2 gap-2 items-center text-sm">
-                                                <span className="truncate font-semibold text-slate-600 dark:text-slate-400" title={header}>{header}</span>
-                                                <select onChange={e => setColumnMap(m => ({...m, [index]: e.target.value}))} defaultValue="ignore" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs">
-                                                    <option value="ignore">Ignore</option>
-                                                    {targetTable?.columns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                                </select>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                    <div className="mt-6 flex justify-end gap-2">
-                        <button onClick={() => { reset(); onClose(); }} className="bg-white dark:bg-slate-700 text-slate-800 dark:text-white font-semibold px-4 py-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-600 border border-slate-300 dark:border-slate-600">Cancel</button>
-                        <button onClick={handleFinishImport} disabled={!((destination === 'new' && newTableName) || (destination === 'append' && appendTableId))} className="bg-emerald-600 text-white font-semibold px-4 py-2 rounded-md hover:bg-emerald-700 disabled:opacity-50">Finish Import</button>
-                    </div>
-                 </div>
-            );
+            case 1: return ( <div className="p-6"> <p className="text-center text-slate-500 dark:text-slate-400 mb-4 text-sm">Import from .json (backup) or .csv files.</p> <input type="file" onChange={e => e.target.files && handleFile(e.target.files[0])} accept=".json,.csv" className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" /> </div> );
+            case 2: return ( <div className="p-6"> <h3 className="font-semibold mb-2 text-slate-700 dark:text-slate-200">Destination</h3> <div className="space-y-2"> <label className="flex items-center gap-3 p-2 rounded-md has-[:checked]:bg-slate-100 dark:has-[:checked]:bg-slate-700"> <input type="radio" name="dest" value="new" checked={destination === 'new'} onChange={() => setDestination('new')} /> <span className="text-sm">Create new table</span> </label> {destination === 'new' && <input type="text" value={newTableName} onChange={e => setNewTableName(e.target.value)} className="w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md px-3 py-2 text-slate-800 dark:text-white ml-6 text-sm" />} <label className="flex items-center gap-3 p-2 rounded-md has-[:checked]:bg-slate-100 dark:has-[:checked]:bg-slate-700"> <input type="radio" name="dest" value="append" checked={destination === 'append'} onChange={() => setDestination('append')} /> <span className="text-sm">Append to existing table</span> </label> {destination === 'append' && <select value={appendTableId} onChange={e => setAppendTableId(e.target.value)} className="w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md px-3 py-2 text-slate-800 dark:text-white ml-6 text-sm"><option value="">Select table...</option>{tables.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>} {destination === 'append' && appendTableId && parsedCsv && ( <div className="ml-6 mt-4"> <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Map CSV Columns</h4> <div className="space-y-2 max-h-32 overflow-y-auto"> {parsedCsv.headers.map((header, index) => { const targetTable = tables.find(t => t.id === appendTableId); return ( <div key={index} className="grid grid-cols-2 gap-2 items-center text-sm"> <span className="truncate font-semibold text-slate-600 dark:text-slate-400" title={header}>{header}</span> <select onChange={e => setColumnMap(m => ({...m, [index]: e.target.value}))} defaultValue="ignore" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs"> <option value="ignore">Ignore</option> {targetTable?.columns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)} </select> </div> ) })} </div> </div> )} </div> <div className="mt-6 flex justify-end gap-2"> <button onClick={() => { reset(); onClose(); }} className="bg-white dark:bg-slate-700 text-slate-800 dark:text-white font-semibold px-4 py-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-600 border border-slate-300 dark:border-slate-600">Cancel</button> <button onClick={handleFinishImport} disabled={!((destination === 'new' && newTableName) || (destination === 'append' && appendTableId))} className="bg-emerald-600 text-white font-semibold px-4 py-2 rounded-md hover:bg-emerald-700 disabled:opacity-50">Finish Import</button> </div> </div> );
         }
     };
-     return (
-        <Modal isOpen={isOpen} onClose={() => { reset(); onClose(); }} title={`Import - Step ${step}`}>
-            {renderStep()}
-        </Modal>
-    );
+     return ( <Modal isOpen={isOpen} onClose={() => { reset(); onClose(); }} title={`Import - Step ${step}`}> {renderStep()} </Modal> );
 };
 
-
-interface TablesScreenProps {
-  tables: Table[];
-  folders: Folder[];
-  onCreateTable: (name: string, columns: string) => void;
-  onCreateFolder: (name: string) => void;
-  onDeleteFolder: (folderId: string) => void;
-  onMoveTableToFolder: (tableId: string, folderId: string | null) => void;
-  onSelectTable: (tableId: string) => void;
-  onDeleteTable: (tableId: string) => void;
-  onImportTables: (tables: Table[], appendToTableId?: string) => void;
-  onShowToast: (message: string, type: 'success' | 'error' | 'info') => void;
-}
-
-const TablesScreen: React.FC<TablesScreenProps> = ({ tables, folders, onCreateTable, onCreateFolder, onDeleteFolder, onMoveTableToFolder, onSelectTable, onDeleteTable, onImportTables, onShowToast }) => {
+const TablesScreen: React.FC = () => {
+    const { tables, folders, handleCreateTable, handleCreateFolder, handleDeleteFolder, handleMoveTableToFolder, handleSelectTable, handleDeleteTable, handleImportTables, showToast } = useAppContext();
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -456,7 +321,7 @@ const TablesScreen: React.FC<TablesScreenProps> = ({ tables, folders, onCreateTa
     
     const handleMoveSubmit = (folderId: string | null) => {
         if (movingTableId) {
-            onMoveTableToFolder(movingTableId, folderId);
+            handleMoveTableToFolder(movingTableId, folderId);
         }
         setMovingTableId(null);
     };
@@ -496,13 +361,13 @@ const TablesScreen: React.FC<TablesScreenProps> = ({ tables, folders, onCreateTa
             )}
             
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {displayedTables.map(table => <TableCard key={table.id} table={table} onDelete={() => setDeletingTable(table)} onSelect={onSelectTable} onMove={setMovingTableId}/>)}
+                {displayedTables.map(table => <TableCard key={table.id} table={table} onDelete={() => setDeletingTable(table)} onSelect={handleSelectTable} onMove={setMovingTableId}/>)}
             </div>
 
-            <CreateTableModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onCreate={onCreateTable} />
-            <CreateFolderModal isOpen={isFolderModalOpen} onClose={() => setIsFolderModalOpen(false)} onCreate={onCreateFolder} />
-            <ExportModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} tables={tables} />
-            <ImportModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} tables={tables} onImport={onImportTables} onShowToast={onShowToast} />
+            <CreateTableModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} />
+            <CreateFolderModal isOpen={isFolderModalOpen} onClose={() => setIsFolderModalOpen(false)} />
+            <ExportModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} />
+            <ImportModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} />
 
             <Modal isOpen={!!movingTableId} onClose={() => setMovingTableId(null)} title="Move Table">
                 <div className="p-4">
@@ -523,7 +388,7 @@ const TablesScreen: React.FC<TablesScreenProps> = ({ tables, folders, onCreateTa
                 isOpen={!!isDeleteFolderModalOpen}
                 onClose={() => setIsDeleteFolderModalOpen(null)}
                 onConfirm={() => {
-                    if(isDeleteFolderModalOpen) onDeleteFolder(isDeleteFolderModalOpen.id);
+                    if(isDeleteFolderModalOpen) handleDeleteFolder(isDeleteFolderModalOpen.id);
                     setIsDeleteFolderModalOpen(null);
                 }}
                 title="Delete Folder"
@@ -536,7 +401,7 @@ const TablesScreen: React.FC<TablesScreenProps> = ({ tables, folders, onCreateTa
                 isOpen={!!deletingTable}
                 onClose={() => setDeletingTable(null)}
                 onConfirm={() => {
-                    if(deletingTable) onDeleteTable(deletingTable.id);
+                    if(deletingTable) handleDeleteTable(deletingTable.id);
                     setDeletingTable(null);
                 }}
                 title="Delete Table"

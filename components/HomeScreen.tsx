@@ -1,20 +1,22 @@
 import * as React from 'react';
-import { Table, UserStats, Theme, SyncStatus, Screen } from '../types';
+import { UserStats, Screen } from '../types';
 import Icon from './Icon';
+import { useAppContext } from '../context/AppContext';
 
 const XP_PER_LEVEL = 1000;
 
-const SyncStatusIndicator: React.FC<{ status: SyncStatus }> = ({ status }) => {
+const SyncStatusIndicator: React.FC = () => {
+  const { syncStatus } = useAppContext();
   const statusMap = {
     idle: { text: 'Up to date', icon: 'check-circle', color: 'text-slate-500 dark:text-slate-400' },
     saving: { text: 'Saving...', icon: 'spinner', color: 'text-slate-500 dark:text-slate-400' },
     saved: { text: 'Saved', icon: 'check-circle', color: 'text-emerald-500' },
     error: { text: 'Sync error', icon: 'error-circle', color: 'text-red-500' },
   };
-  const current = statusMap[status];
+  const current = statusMap[syncStatus];
   return (
     <div className={`flex items-center gap-2 text-sm ${current.color} transition-colors`}>
-      <Icon name={current.icon} className={`w-5 h-5 ${status === 'saving' ? 'animate-spin' : ''}`} />
+      <Icon name={current.icon} className={`w-5 h-5 ${syncStatus === 'saving' ? 'animate-spin' : ''}`} />
       <span>{current.text}</span>
     </div>
   );
@@ -77,19 +79,18 @@ const ActivityHeatmap: React.FC<{ activity: UserStats['activity'] }> = ({ activi
   );
 };
 
-interface HomeScreenProps {
-  stats: UserStats;
-  tables: Table[];
-  theme: Theme;
-  syncStatus: SyncStatus;
-  isGuest: boolean;
-  onSelectTable: (tableId: string) => void;
-  onNavigateTo: (screen: keyof typeof Screen) => void;
-  onToggleTheme: () => void;
-  onLogout: () => void;
-}
+const HomeScreen: React.FC = () => {
+  const {
+    stats,
+    tables,
+    theme,
+    isGuest,
+    handleSelectTable,
+    handleNavigation,
+    handleToggleTheme,
+    handleLogout,
+  } = useAppContext();
 
-const HomeScreen: React.FC<HomeScreenProps> = ({ stats, tables, theme, syncStatus, isGuest, onSelectTable, onNavigateTo, onToggleTheme, onLogout }) => {
   const currentLevelXp = stats.xp % XP_PER_LEVEL;
   const progressPercentage = (currentLevelXp / XP_PER_LEVEL) * 100;
 
@@ -113,12 +114,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ stats, tables, theme, syncStatu
           <p className="text-sm text-slate-500 dark:text-slate-400">Your personal vocabulary space.</p>
         </div>
         <div className='flex items-center gap-2'>
-            {!isGuest && <SyncStatusIndicator status={syncStatus} />}
-            <button onClick={onToggleTheme} className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            {!isGuest && <SyncStatusIndicator />}
+            <button onClick={handleToggleTheme} className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
               <Icon name={theme === 'dark' ? 'sun' : 'moon'} className="w-6 h-6" />
             </button>
             {!isGuest && (
-                 <button onClick={onLogout} title="Logout" className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                 <button onClick={handleLogout} title="Logout" className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                     <Icon name="logout" className="w-6 h-6" />
                 </button>
             )}
@@ -145,7 +146,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ stats, tables, theme, syncStatu
         <h2 className="text-xl font-bold mb-3 text-slate-800 dark:text-white">Quick Access</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div 
-            onClick={() => onNavigateTo('Vmind')}
+            onClick={() => handleNavigation('Vmind')}
             className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/50 rounded-xl p-4 flex items-center gap-4 hover:border-emerald-500/80 dark:hover:border-emerald-600 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer transition-all group"
             >
                 <Icon name="brain" className="w-8 h-8 text-slate-400 dark:text-slate-500 group-hover:text-emerald-500 transition-colors" />
@@ -155,7 +156,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ stats, tables, theme, syncStatu
                 </div>
             </div>
             <div 
-            onClick={() => onNavigateTo('Reading')}
+            onClick={() => handleNavigation('Reading')}
             className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/50 rounded-xl p-4 flex items-center gap-4 hover:border-emerald-500/80 dark:hover:border-emerald-600 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer transition-all group"
             >
                 <Icon name="file-text" className="w-8 h-8 text-slate-400 dark:text-slate-500 group-hover:text-emerald-500 transition-colors" />
@@ -172,7 +173,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ stats, tables, theme, syncStatu
           <h2 className="text-xl font-bold mb-3 text-slate-800 dark:text-white">Recently Studied</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {recentlyStudiedTables.map(table => (
-              <div key={table.id} onClick={() => onSelectTable(table.id)} className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/50 rounded-xl p-3 flex items-center justify-between hover:border-emerald-500/80 hover:shadow-md transition-all group cursor-pointer hover:-translate-y-0.5">
+              <div key={table.id} onClick={() => handleSelectTable(table.id)} className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/50 rounded-xl p-3 flex items-center justify-between hover:border-emerald-500/80 hover:shadow-md transition-all group cursor-pointer hover:-translate-y-0.5">
                   <div>
                     <h3 className="font-semibold text-slate-800 dark:text-white mb-0.5 truncate">{table.name}</h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400">{table.rows.length} words</p>

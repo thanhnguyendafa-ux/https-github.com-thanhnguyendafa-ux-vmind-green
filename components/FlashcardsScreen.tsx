@@ -1,11 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Table, Relation, FlashcardStatus, VocabRow } from '../types';
 import Icon from './Icon';
-
-interface FlashcardsScreenProps {
-  tables: Table[];
-  onStartSession: (tableIds: string[], relationIds: string[]) => void;
-}
+import { useAppContext } from '../context/AppContext';
 
 const statusColors: { [key in FlashcardStatus]: { bg: string; text: string } } = {
   [FlashcardStatus.New]: { bg: 'bg-slate-200 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-300' },
@@ -16,7 +12,8 @@ const statusColors: { [key in FlashcardStatus]: { bg: string; text: string } } =
   [FlashcardStatus.Perfect]: { bg: 'bg-purple-200 dark:bg-purple-900', text: 'text-purple-700 dark:text-purple-300' },
 };
 
-const FlashcardsScreen: React.FC<FlashcardsScreenProps> = ({ tables, onStartSession }) => {
+const FlashcardsScreen: React.FC = () => {
+  const { tables, handleStartFlashcardSession } = useAppContext();
   const [selectedTableIds, setSelectedTableIds] = useState<Set<string>>(new Set());
   const [selectedRelationIds, setSelectedRelationIds] = useState<Set<string>>(new Set());
 
@@ -52,7 +49,6 @@ const FlashcardsScreen: React.FC<FlashcardsScreenProps> = ({ tables, onStartSess
     return { availableRelations: relations, globalStats: stats, totalRows: total };
   }, [tables, selectedTableIds]);
   
-  // Auto-select relations when tables change if they are compatible
   useEffect(() => {
     setSelectedRelationIds(prev => {
         const newSet = new Set<string>();
@@ -65,7 +61,6 @@ const FlashcardsScreen: React.FC<FlashcardsScreenProps> = ({ tables, onStartSess
         return newSet;
     });
   }, [availableRelations]);
-
 
   const handleToggleTable = (tableId: string) => {
     const newSet = new Set(selectedTableIds);
@@ -91,7 +86,6 @@ const FlashcardsScreen: React.FC<FlashcardsScreenProps> = ({ tables, onStartSess
       </header>
 
       <div className="space-y-6">
-        {/* Table Selection */}
         <div>
           <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-3">1. Select Tables</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -109,7 +103,6 @@ const FlashcardsScreen: React.FC<FlashcardsScreenProps> = ({ tables, onStartSess
           </div>
         </div>
         
-        {/* Stats & Relation Selection */}
         {selectedTableIds.size > 0 && (
           <div className="animate-fadeIn grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-1">
@@ -159,7 +152,7 @@ const FlashcardsScreen: React.FC<FlashcardsScreenProps> = ({ tables, onStartSess
 
       <div className="mt-8">
         <button 
-          onClick={() => onStartSession(Array.from(selectedTableIds), Array.from(selectedRelationIds))}
+          onClick={() => handleStartFlashcardSession(Array.from(selectedTableIds), Array.from(selectedRelationIds))}
           disabled={!isReady}
           className="w-full bg-emerald-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
