@@ -25,7 +25,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title}>
       <div className="p-6">
-        <p className="text-slate-600 dark:text-gray-300 mb-4">{message}</p>
+        <p className="text-slate-600 dark:text-slate-300 mb-4">{message}</p>
         
         {warning && (
           <div className="bg-red-500/10 dark:bg-red-900/20 p-3 rounded-md mb-6">
@@ -38,7 +38,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
         <div className="flex justify-end gap-2">
           <button 
             onClick={onClose} 
-            className="bg-white dark:bg-gray-700 text-slate-800 dark:text-white font-semibold px-4 py-2 rounded-md hover:bg-slate-50 dark:hover:bg-gray-600 border border-slate-300 dark:border-gray-600 transition-colors"
+            className="bg-white dark:bg-slate-700 text-slate-800 dark:text-white font-semibold px-4 py-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-600 border border-slate-300 dark:border-slate-600 transition-colors"
           >
             Cancel
           </button>

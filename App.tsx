@@ -1,12 +1,12 @@
-
-
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import * as React from 'react';
 import { Session } from '@supabase/supabase-js';
-import { Screen, Table, UserStats, StudySession, Question, QuestionType, Badge, Theme, AppState, SyncStatus, Note, VocabRow, Folder, Column, FlashcardSession, FlashcardStatus } from './types';
+// FIX: Removed unused and non-existent 'QuestionType' from './types' import.
+import { Screen, Table, UserStats, StudySessionData, Question, Badge, Theme, AppState, SyncStatus, Note, VocabRow, Folder, Column, FlashcardSession, FlashcardStatus, SessionWordResult, StudySettings, AppSettings, StudyMode } from './types';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { useDebounce } from './hooks/useDebounce';
 import { supabase } from './services/supabaseClient';
 import { BADGES } from './constants';
+import { generateStudySession } from '../utils/studySessionGenerator';
 import HomeScreen from './components/HomeScreen';
 import TablesScreen from './components/TablesScreen';
 import TableScreen from './components/TableScreen';
@@ -24,79 +24,93 @@ import FlashcardsScreen from './components/FlashcardsScreen';
 import FlashcardSessionScreen from './components/FlashcardSessionScreen';
 import StudySetupScreen from './components/StudySetupScreen';
 import Toast from './components/Toast';
+import JournalScreen from './components/JournalScreen';
 
 
 const XP_PER_CORRECT_ANSWER = 10;
+const XP_QUIT_PENALTY = 15;
 const XP_PER_LEVEL = 1000;
 const XP_PER_FLASHCARD_REVIEW = 5;
 
-const defaultTables: Table[] = [
-    {
-        id: 'default-1',
-        name: 'Sample: Spanish Vocabulary',
-        columns: [ { id: 'col-1', name: 'Spanish' }, { id: 'col-2', name: 'English' } ],
-        rows: [
-            { id: 'row-1', cols: { 'col-1': 'Hola', 'col-2': 'Hello' }, stats: { correct: 0, incorrect: 0, lastStudied: null, flashcardStatus: FlashcardStatus.New, flashcardEncounters: 0, isFlashcardReviewed: false, lastPracticeDate: null } },
-            { id: 'row-2', cols: { 'col-1': 'Adiós', 'col-2': 'Goodbye' }, stats: { correct: 0, incorrect: 0, lastStudied: null, flashcardStatus: FlashcardStatus.New, flashcardEncounters: 0, isFlashcardReviewed: false, lastPracticeDate: null } },
-            { id: 'row-3', cols: { 'col-1': 'Gracias', 'col-2': 'Thank you' }, stats: { correct: 0, incorrect: 0, lastStudied: null, flashcardStatus: FlashcardStatus.New, flashcardEncounters: 0, isFlashcardReviewed: false, lastPracticeDate: null } },
-            { id: 'row-4', cols: { 'col-1': 'Por favor', 'col-2': 'Please' }, stats: { correct: 0, incorrect: 0, lastStudied: null, flashcardStatus: FlashcardStatus.New, flashcardEncounters: 0, isFlashcardReviewed: false, lastPracticeDate: null } },
-        ],
-        relations: [
-            { id: 'rel-1', name: 'Spanish to English', questionColumnIds: ['col-1'], answerColumnIds: ['col-2'], isCustom: false }
-        ],
-        description: 'A sample table with basic Spanish words and their English translations.',
-        tags: ['spanish', 'sample', 'vocabulary'],
-        isPublic: false,
-    },
-];
+const defaultSolarSystemTable: Table = {
+    id: 'default-solar-system',
+    name: 'Solar System Facts',
+    columns: [
+        { id: 'col-planet', name: 'Planet' },
+        { id: 'col-nickname', name: 'Nickname' },
+        { id: 'col-diameter', name: 'Diameter (km)' },
+        { id: 'col-fact', name: 'Fact' },
+        { id: 'col-rings', name: 'Has Rings' },
+    ],
+    rows: [
+        { id: 'row-mercury', cols: { 'col-planet': 'Mercury', 'col-nickname': 'The Swift Planet', 'col-diameter': '4879', 'col-fact': 'It is the smallest planet in our solar system.', 'col-rings': 'No' }, stats: { correct: 0, incorrect: 0, lastStudied: null, flashcardStatus: FlashcardStatus.New, flashcardEncounters: 0, isFlashcardReviewed: false, lastPracticeDate: null } },
+        { id: 'row-venus', cols: { 'col-planet': 'Venus', 'col-nickname': "Earth's Twin", 'col-diameter': '12104', 'col-fact': 'It spins in the opposite direction to most planets.', 'col-rings': 'No' }, stats: { correct: 1, incorrect: 5, lastStudied: Date.now() - 86400000, flashcardStatus: FlashcardStatus.Again, flashcardEncounters: 6, isFlashcardReviewed: true, lastPracticeDate: Date.now() - 86400000 } },
+        { id: 'row-earth', cols: { 'col-planet': 'Earth', 'col-nickname': 'The Blue Planet', 'col-diameter': '12742', 'col-fact': 'The only planet known to support life.', 'col-rings': 'No' }, stats: { correct: 10, incorrect: 1, lastStudied: Date.now() - 259200000, flashcardStatus: FlashcardStatus.Easy, flashcardEncounters: 11, isFlashcardReviewed: true, lastPracticeDate: Date.now() - 259200000 } },
+        { id: 'row-mars', cols: { 'col-planet': 'Mars', 'col-nickname': 'The Red Planet', 'col-diameter': '6779', 'col-fact': 'It has the largest volcano, Olympus Mons.', 'col-rings': 'No' }, stats: { correct: 3, incorrect: 2, lastStudied: Date.now() - 172800000, flashcardStatus: FlashcardStatus.Hard, flashcardEncounters: 5, isFlashcardReviewed: true, lastPracticeDate: Date.now() - 172800000 } },
+        { id: 'row-jupiter', cols: { 'col-planet': 'Jupiter', 'col-nickname': 'The Gas Giant', 'col-diameter': '139820', 'col-fact': 'It has a Great Red Spot, a giant storm.', 'col-rings': 'Yes' }, stats: { correct: 8, incorrect: 2, lastStudied: Date.now() - 604800000 * 2, flashcardStatus: FlashcardStatus.Good, flashcardEncounters: 10, isFlashcardReviewed: true, lastPracticeDate: Date.now() - 604800000 * 2 } },
+        { id: 'row-saturn', cols: { 'col-planet': 'Saturn', 'col-nickname': 'The Ringed Planet', 'col-diameter': '116460', 'col-fact': 'Its rings are made of ice and rock particles.', 'col-rings': 'Yes' }, stats: { correct: 12, incorrect: 0, lastStudied: Date.now() - 86400000, flashcardStatus: FlashcardStatus.Perfect, flashcardEncounters: 12, isFlashcardReviewed: true, lastPracticeDate: Date.now() - 86400000 } },
+        { id: 'row-uranus', cols: { 'col-planet': 'Uranus', 'col-nickname': 'The Ice Giant', 'col-diameter': '50724', 'col-fact': 'It rotates on its side.', 'col-rings': 'Yes' }, stats: { correct: 0, incorrect: 0, lastStudied: null, flashcardStatus: FlashcardStatus.New, flashcardEncounters: 0, isFlashcardReviewed: false, lastPracticeDate: null } },
+        { id: 'row-neptune', cols: { 'col-planet': 'Neptune', 'col-nickname': 'The Windiest Planet', 'col-diameter': '49244', 'col-fact': 'It has supersonic winds.', 'col-rings': 'Yes' }, stats: { correct: 5, incorrect: 3, lastStudied: Date.now() - 604800000 * 3, flashcardStatus: FlashcardStatus.Good, flashcardEncounters: 8, isFlashcardReviewed: true, lastPracticeDate: Date.now() - 604800000 * 3 } },
+    ],
+    relations: [
+        { id: 'rel-planet-nickname', name: 'Planet ➡️ Nickname', questionColumnIds: ['col-planet'], answerColumnIds: ['col-nickname'], compatibleModes: [StudyMode.Flashcards, StudyMode.MultipleChoice, StudyMode.Typing, StudyMode.TrueFalse], isCustom: false },
+        { id: 'rel-fact-planet', name: 'Fact ➡️ Planet', questionColumnIds: ['col-fact'], answerColumnIds: ['col-planet'], compatibleModes: [StudyMode.Flashcards, StudyMode.MultipleChoice, StudyMode.Typing], isCustom: false },
+        { id: 'rel-planet-diameter', name: 'Planet ➡️ Diameter', questionColumnIds: ['col-planet'], answerColumnIds: ['col-diameter'], compatibleModes: [StudyMode.Typing], isCustom: true },
+        { id: 'rel-scramble', name: 'Planet Scramble', questionColumnIds: ['col-planet'], answerColumnIds: [], compatibleModes: [StudyMode.Scrambled], isCustom: true },
+    ],
+    description: 'A comprehensive table about the planets in our solar system, designed for testing all of Vmind\'s features.',
+    tags: ['science', 'space', 'sample'],
+    isPublic: false,
+};
 
 const defaultStats: UserStats = {
     xp: 0, level: 1, studyStreak: 0, lastSessionDate: null, activity: {},
     totalStudyTimeSeconds: 0, unlockedBadges: [],
 };
 
-const defaultState: AppState = { tables: defaultTables, folders: [], stats: defaultStats, notes: [], savedFlashcardQueues: {} };
+const defaultSettings: AppSettings = {
+    journalMode: 'manual',
+};
 
-function shuffleArray<T>(array: T[]): T[] {
-  const newArray = [...array];
-  for (let i = newArray.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-  }
-  return newArray;
-}
+const defaultState: AppState = { tables: [defaultSolarSystemTable], folders: [], stats: defaultStats, notes: [], settings: defaultSettings, savedFlashcardQueues: {} };
 
 function App() {
   // Global State
-  const [session, setSession] = useState<Session | null>(null);
-  const [isGuest, setIsGuest] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [session, setSession] = React.useState<Session | null>(null);
+  const [isGuest, setIsGuest] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
   
   // App Data State
-  const [appState, setAppState] = useState<AppState>(defaultState);
+  const [appState, setAppState] = React.useState<AppState>(defaultState);
   const [localState, setLocalState] = useLocalStorage<AppState>('vmind-guest-data', defaultState);
   
   const tables = isGuest ? localState.tables : appState.tables;
   const folders = isGuest ? localState.folders : appState.folders;
   const stats = isGuest ? localState.stats : appState.stats;
   const notes = isGuest ? localState.notes : appState.notes;
+  const settings = isGuest ? localState.settings : appState.settings;
   const savedFlashcardQueues = isGuest ? localState.savedFlashcardQueues : appState.savedFlashcardQueues;
   const setState = isGuest ? setLocalState : setAppState;
 
   // UI State
   const [theme, setTheme] = useLocalStorage<Theme>('vmind-theme', 'dark');
-  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.Home);
-  const [activeTableId, setActiveTableId] = useState<string | null>(null);
-  const [activeSession, setActiveSession] = useState<StudySession | null>(null);
-  const [activeFlashcardSession, setActiveFlashcardSession] = useState<FlashcardSession | null>(null);
-  const [unlockedBadgeNotification, setUnlockedBadgeNotification] = useState<Badge | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
+  const [currentScreen, setCurrentScreen] = React.useState<Screen>(Screen.Home);
+  const [activeTableId, setActiveTableId] = React.useState<string | null>(null);
+  const [activeSession, setActiveSession] = React.useState<StudySessionData | null>(null);
+  const [activeFlashcardSession, setActiveFlashcardSession] = React.useState<FlashcardSession | null>(null);
+  const [unlockedBadgeNotification, setUnlockedBadgeNotification] = React.useState<Badge | null>(null);
+  const [toast, setToast] = React.useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [syncStatus, setSyncStatus] = React.useState<SyncStatus>('idle');
+  const [isDirty, setIsDirty] = React.useState(false);
 
   const debouncedAppState = useDebounce(appState, 1500);
+  
+  // Ref to hold the latest state for use in unload handlers, preventing stale closures.
+  const latestStateRef = React.useRef(appState);
+  latestStateRef.current = appState;
 
   // --- Auth & Data Loading ---
-  useEffect(() => {
+  React.useEffect(() => {
     const getSession = async () => {
         const { data: { session } } = await supabase.auth.getSession();
         setSession(session);
@@ -111,7 +125,7 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(() => {
+  React.useEffect(() => {
       if (session) {
           setIsGuest(false);
           fetchData();
@@ -136,17 +150,22 @@ function App() {
             // --- Backward Compatibility ---
             fetchedState.notes = fetchedState.notes || [];
             fetchedState.folders = fetchedState.folders || [];
+            fetchedState.settings = { ...defaultSettings, ...(fetchedState.settings || {}) };
             fetchedState.savedFlashcardQueues = fetchedState.savedFlashcardQueues || {};
             fetchedState.tables = fetchedState.tables.map(t => {
                 const rowsSource = (t as any).words || t.rows;
                 return {
                     ...t,
                     words: undefined, // remove legacy field
-                    relations: t.relations?.map(r => ({
+                    relations: (t.relations || []).map((r: any) => ({
                         ...r,
-                        questionColumnIds: r.questionColumnIds || [(r as any).questionColumnId],
-                        answerColumnIds: r.answerColumnIds || [(r as any).answerColumnId],
-                    })) || [],
+                        questionColumnIds: Array.isArray(r.questionColumnIds)
+                            ? r.questionColumnIds.filter((id: any): id is string => typeof id === 'string')
+                            : ([r.questionColumnId].filter((id: any): id is string => typeof id === 'string')),
+                        answerColumnIds: Array.isArray(r.answerColumnIds)
+                            ? r.answerColumnIds.filter((id: any): id is string => typeof id === 'string')
+                            : ([r.answerColumnId].filter((id: any): id is string => typeof id === 'string')),
+                    })),
                     rows: (rowsSource || []).map((w: any): VocabRow => ({
                         id: w.id,
                         cols: (w as any).data || w.cols, // Handle legacy 'data'
@@ -158,6 +177,7 @@ function App() {
                             flashcardEncounters: w.stats?.flashcardEncounters || 0,
                             isFlashcardReviewed: w.stats?.isFlashcardReviewed || false,
                             lastPracticeDate: w.stats?.lastPracticeDate || null,
+                            wasQuit: w.stats?.wasQuit || false,
                         }
                     })),
                     description: t.description || '',
@@ -174,7 +194,7 @@ function App() {
     }
   };
 
-  const saveData = async (newState: AppState) => {
+  const saveData = React.useCallback(async (newState: AppState) => {
     if (!session || isGuest) return;
     setSyncStatus('saving');
     try {
@@ -183,18 +203,52 @@ function App() {
             .upsert({ id: session.user.id, app_data: newState, updated_at: new Date().toISOString() });
         if (error) throw error;
         setSyncStatus('saved');
+        
+        // **FIX:** Only mark as "not dirty" if the state we just saved is still the current state.
+        // This prevents a race condition where a new change made during the save gets ignored.
+        const currentState = latestStateRef.current;
+        if (JSON.stringify(newState) === JSON.stringify(currentState)) {
+          setIsDirty(false);
+        }
+
         setTimeout(() => setSyncStatus('idle'), 2000);
     } catch (error) {
         console.error('Error saving data:', error);
         setSyncStatus('error');
     }
-  };
+  }, [session, isGuest]);
   
-  useEffect(() => {
-    if (debouncedAppState && session && !isGuest && syncStatus !== 'saving') {
+  // --- Enhanced Saving Logic ---
+  
+  // Debounced save for performance during active use
+  React.useEffect(() => {
+    if (isDirty && session && !isGuest) {
       saveData(debouncedAppState);
     }
-  }, [debouncedAppState, session, isGuest]);
+  }, [debouncedAppState, session, isGuest, isDirty, saveData]);
+
+  // Immediate save on page hide/exit to prevent data loss
+  React.useEffect(() => {
+    const handleVisibilityChange = () => {
+      // When the page is hidden (e.g., user switches tabs or closes browser),
+      // and there are unsaved changes, save immediately.
+      if (document.visibilityState === 'hidden' && isDirty) {
+        saveData(latestStateRef.current);
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isDirty, saveData]);
+
+  const setAndMarkDirty = (updater: React.SetStateAction<AppState>) => {
+      setState(updater);
+      setIsDirty(true);
+  };
+
 
   // --- Guest Mode ---
   const handleGuestLogin = () => {
@@ -204,9 +258,9 @@ function App() {
 
   // --- Logout ---
   const handleLogout = async () => {
-    // FIX: Force a save of the current state before logging out to prevent data loss
-    // from actions performed within the debounce delay period.
-    await saveData(appState);
+    if (!isGuest && isDirty) {
+      await saveData(appState);
+    }
     
     await supabase.auth.signOut();
     setIsGuest(false);
@@ -215,7 +269,7 @@ function App() {
   };
   
   // --- Theming ---
-  useEffect(() => {
+  React.useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
   const handleToggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
@@ -223,14 +277,22 @@ function App() {
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
   };
+  
+  const handleUpdateSettings = (newSettings: Partial<AppSettings>) => {
+    setAndMarkDirty(prev => ({
+        ...prev,
+        settings: {
+            ...prev.settings,
+            ...newSettings,
+        },
+    }));
+  };
 
   // --- App Logic ---
-  const activeTable = useMemo(() => tables.find(t => t.id === activeTableId), [tables, activeTableId]);
+  const activeTable = React.useMemo(() => tables.find(t => t.id === activeTableId), [tables, activeTableId]);
 
   const handleCreateTable = (name: string, columnsStr: string) => {
-    // FIX: Replaced .filter(s => s) with a more explicit .filter(s => s.length > 0) to ensure only non-empty strings are included and to resolve potential TypeScript type inference issues where the array type might be misinterpreted.
-    // FIX: Explicitly type map and filter arguments to resolve type inference error.
-    const columnNames = columnsStr.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+    const columnNames: string[] = columnsStr.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
     if (columnNames.length === 0) {
         alert("Please provide at least one column name.");
         return;
@@ -249,11 +311,11 @@ function App() {
       tags: [],
       isPublic: false,
     };
-    setState(prev => ({ ...prev, tables: [...prev.tables, newTable] }));
+    setAndMarkDirty(prev => ({ ...prev, tables: [...prev.tables, newTable] }));
   };
   
   const handleDeleteTable = (tableId: string) => {
-    setState(prev => {
+    setAndMarkDirty(prev => {
         const newTables = prev.tables.filter(t => t.id !== tableId);
         const newFolders = prev.folders.map(f => ({
             ...f,
@@ -269,15 +331,15 @@ function App() {
           name,
           tableIds: [],
       };
-      setState(prev => ({ ...prev, folders: [...prev.folders, newFolder] }));
+      setAndMarkDirty(prev => ({ ...prev, folders: [...prev.folders, newFolder] }));
   };
 
   const handleDeleteFolder = (folderId: string) => {
-      setState(prev => ({...prev, folders: prev.folders.filter(f => f.id !== folderId)}));
+      setAndMarkDirty(prev => ({...prev, folders: prev.folders.filter(f => f.id !== folderId)}));
   };
 
   const handleMoveTableToFolder = (tableId: string, folderId: string | null) => {
-      setState(prev => {
+      setAndMarkDirty(prev => {
           // Remove from old folder
           const newFolders = prev.folders.map(f => ({
               ...f,
@@ -295,10 +357,8 @@ function App() {
   };
 
   const handleImportTables = (importedTables: Table[], appendToTableId?: string) => {
-    setState(prev => {
+    setAndMarkDirty(prev => {
         if (appendToTableId) {
-            // This logic assumes the importedTables array contains one "table"
-            // whose rows need to be appended.
             const rowsToAppend = importedTables[0]?.rows || [];
             const newTables = prev.tables.map(t => {
                 if (t.id === appendToTableId) {
@@ -308,7 +368,6 @@ function App() {
             });
             return { ...prev, tables: newTables };
         } else {
-            // Add new tables, ensuring no ID conflicts
             const existingIds = new Set(prev.tables.map(t => t.id));
             const newTables = importedTables.map(t => 
                 existingIds.has(t.id) ? { ...t, id: `${t.id}-${Date.now()}` } : t
@@ -324,10 +383,18 @@ function App() {
   };
 
   const handleUpdateTable = (updatedTable: Table) => {
-    setState(prev => ({ ...prev, tables: prev.tables.map(t => t.id === updatedTable.id ? updatedTable : t) }));
+    setAndMarkDirty(prev => ({ ...prev, tables: prev.tables.map(t => t.id === updatedTable.id ? updatedTable : t) }));
   };
 
-  // --- Reading Space Logic ---
+  const handleUpdateRow = (updatedRow: VocabRow) => {
+      const tableToUpdate = tables.find(t => t.rows.some(r => r.id === updatedRow.id));
+      if (tableToUpdate) {
+          const newRows = tableToUpdate.rows.map(r => r.id === updatedRow.id ? updatedRow : r);
+          handleUpdateTable({ ...tableToUpdate, rows: newRows });
+      }
+  };
+
+  // --- Reading Space & Journal Logic ---
   const handleCreateNote = () => {
     const newNote: Note = {
       id: Date.now().toString(),
@@ -335,160 +402,162 @@ function App() {
       content: 'Start writing here...',
       createdAt: Date.now(),
     };
-    setState(prev => ({ ...prev, notes: [...prev.notes, newNote] }));
+    setAndMarkDirty(prev => ({ ...prev, notes: [...prev.notes, newNote] }));
   };
 
   const handleUpdateNote = (updatedNote: Note) => {
-    setState(prev => ({ ...prev, notes: prev.notes.map(n => n.id === updatedNote.id ? updatedNote : n) }));
+    setAndMarkDirty(prev => ({ ...prev, notes: prev.notes.map(n => n.id === updatedNote.id ? updatedNote : n) }));
   };
 
   const handleDeleteNote = (noteId: string) => {
     if (window.confirm("Are you sure you want to delete this note?")) {
-      setState(prev => ({...prev, notes: prev.notes.filter(n => n.id !== noteId)}));
+      setAndMarkDirty(prev => ({...prev, notes: prev.notes.filter(n => n.id !== noteId)}));
     }
   };
   
-  const handleStartStudySession = useCallback((tableId: string, relationId: string) => {
-    const table = tables.find(t => t.id === tableId);
-    const relation = table?.relations.find(r => r.id === relationId);
-
-    if (!table || !relation || table.rows.length < 1) return;
-
-    const { questionColumnIds, answerColumnIds } = relation;
+  const handleSaveToJournal = (source: string, content: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    const journalTitle = `Journal - ${today}`;
+    let todayNote = notes.find(n => n.title === journalTitle);
     
-    const getColumnName = (id: string) => table.columns.find(c => c.id === id)?.name || '';
-    const questionSourceColumnNames = questionColumnIds.map(getColumnName);
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const contentToPrepend = `\n\n---\n**${source}** (${time})\n${content}`;
 
-    const questions: Question[] = shuffleArray(table.rows)
-      .map((row: VocabRow): Question | null => {
-        const questionText = questionColumnIds.map(id => row.cols[id]).filter((val): val is string => !!val).join(' / ');
-        const correctAnswer = answerColumnIds.map(id => row.cols[id]).filter((val): val is string => !!val).join(' / ');
-
-        if (!questionText || !correctAnswer) {
-            return null;
-        }
-
-        const questionType = table.rows.length >= 4 && Math.random() > 0.5 ? QuestionType.MultipleChoice : QuestionType.Typing;
-        let options: string[] = [];
-        if (questionType === QuestionType.MultipleChoice) {
-            const otherAnswers = table.rows.reduce((acc: string[], w) => {
-              if (w.id !== row.id) {
-                const answerPart = answerColumnIds.map(id => w.cols[id]).filter((val): val is string => !!val).join(' / ');
-                if(answerPart) acc.push(answerPart);
-              }
-              return acc;
-            }, []);
-
-            options = shuffleArray(otherAnswers).slice(0, 3);
-            options.push(correctAnswer);
-            options = shuffleArray(options);
-        }
-        return {
-            rowId: row.id,
-            questionSourceColumnNames,
-            questionText, correctAnswer,
-            type: questionType, options,
+    if (todayNote) {
+        const noteHeaderRegex = /^(Journal entry for .*?\.)/;
+        const match = todayNote.content.match(noteHeaderRegex);
+        const header = match ? match[0] : '';
+        const body = match ? todayNote.content.substring(header.length) : todayNote.content;
+        
+        handleUpdateNote({ ...todayNote, content: `${header}${contentToPrepend}${body}` });
+    } else {
+        const newNote: Note = {
+            id: Date.now().toString(),
+            title: journalTitle,
+            content: `Journal entry for ${today}.${contentToPrepend}`,
+            createdAt: Date.now(),
         };
-    })
-    .filter((q): q is Question => q !== null);
+        setAndMarkDirty(prev => ({...prev, notes: [...prev.notes, newNote]}));
+    }
+    showToast("Saved to Journal", "success");
+  };
+
+  const handleStartStudySession = React.useCallback((settings: StudySettings) => {
+    const questions = generateStudySession(tables, settings);
     
     if (questions.length === 0) {
-      alert("Not enough complete rows in this table for this relation.");
+      alert("Could not generate any questions based on the current settings. Please check your configuration and make sure there are enough valid words.");
       return;
     }
 
     setActiveSession({
-        tableId, relationId, questions, currentQuestionIndex: 0, answers: {}, startTime: Date.now(),
+        questions, 
+        startTime: Date.now(),
+        settings: settings,
     });
     setCurrentScreen(Screen.StudySession);
   }, [tables]);
-
-  const handleAnswer = (questionIndex: number, answer: string, isCorrect: boolean) => {
-      if (!activeSession) return;
-      
-      const updatedAnswers = { ...activeSession.answers, [questionIndex]: { answer, isCorrect } };
-      
-      if(isCorrect) {
-          setState(prev => {
-            const newXp = prev.stats.xp + XP_PER_CORRECT_ANSWER;
-            const newLevel = Math.floor(newXp / XP_PER_LEVEL) + 1;
-            return { ...prev, stats: { ...prev.stats, xp: newXp, level: newLevel } };
-          });
-      }
-      
-      const goToNext = () => {
-        if (activeSession.currentQuestionIndex < activeSession.questions.length - 1) {
-            setActiveSession(prev => prev ? {...prev, answers: updatedAnswers, currentQuestionIndex: prev.currentQuestionIndex + 1 } : null);
-        } else {
-             setActiveSession(prev => prev ? {...prev, answers: updatedAnswers } : null);
-             setTimeout(() => handleEndSession(), 0);
-        }
-      }
-      setTimeout(goToNext, 1200);
-  };
   
-  const handleEndSession = () => {
-      if(!activeSession) return;
+    const processSessionResults = (prev: AppState, results: SessionWordResult[], durationSeconds: number, penalty: number, remainingQuestionIds?: Set<string>): AppState => {
+        const rowUpdatesByTable = results.reduce((acc, result) => {
+            for (const table of tables) {
+                const row = table.rows.find(r => r.id === result.rowId);
+                if (row) {
+                    if (!acc[table.id]) acc[table.id] = {};
+                    if (!acc[table.id][result.rowId]) acc[table.id][result.rowId] = { correct: 0, incorrect: 0 };
+                    if (result.isCorrect) acc[table.id][result.rowId].correct++;
+                    else acc[table.id][result.rowId].incorrect++;
+                    break;
+                }
+            }
+            return acc;
+        }, {} as Record<string, Record<string, { correct: number, incorrect: number }>>);
 
-      const table = tables.find(t => t.id === activeSession.tableId);
-      if(table) {
-          const updatedRows = table.rows.map(w => {
-              const sessionResults = Object.entries(activeSession.answers).filter(([idx]) => 
-                activeSession.questions[parseInt(idx)].rowId === w.id
-              );
-              if (sessionResults.length === 0) return w;
-              
-              let correctCount = w.stats.correct; let incorrectCount = w.stats.incorrect;
-              sessionResults.forEach(([, result]: [string, { answer: string; isCorrect: boolean }]) => {
-                  if (result.isCorrect) correctCount++; else incorrectCount++;
-              });
-              return {...w, stats: { ...w.stats, correct: correctCount, incorrect: incorrectCount, lastStudied: Date.now() }};
-          });
-          handleUpdateTable({...table, rows: updatedRows});
-      }
-      
-      const sessionDurationSeconds = Math.round((Date.now() - activeSession.startTime) / 1000);
-      const today = new Date(); const todayStr = today.toISOString().split('T')[0];
-      
-      setState(prev => {
-          const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-          const yesterdayStr = yesterday.toISOString().split('T')[0];
-          const lastSessionWasYesterday = prev.stats.lastSessionDate === yesterdayStr;
-          const lastSessionWasToday = prev.stats.lastSessionDate === todayStr;
+        const updatedTables = prev.tables.map(table => {
+            const tableUpdates = rowUpdatesByTable[table.id];
+            const hasUpdates = tableUpdates || (remainingQuestionIds && table.rows.some(r => remainingQuestionIds.has(r.id)));
+            if (!hasUpdates) return table;
 
-          const newStreak = lastSessionWasYesterday ? prev.stats.studyStreak + 1 : (lastSessionWasToday ? prev.stats.studyStreak : 1);
+            return {
+                ...table,
+                rows: table.rows.map(row => {
+                    const updates = tableUpdates?.[row.id];
+                    const wasQuit = remainingQuestionIds?.has(row.id);
+                    if (!updates && !wasQuit) return row;
+                    return {
+                        ...row,
+                        stats: {
+                            ...row.stats,
+                            correct: row.stats.correct + (updates?.correct || 0),
+                            incorrect: row.stats.incorrect + (updates?.incorrect || 0),
+                            lastStudied: Date.now(),
+                            wasQuit: wasQuit,
+                        }
+                    };
+                })
+            };
+        });
 
-          const newActivity = { ...prev.stats.activity, [todayStr]: (prev.stats.activity[todayStr] || 0) + sessionDurationSeconds };
-          const newTotalTime = prev.stats.totalStudyTimeSeconds + sessionDurationSeconds;
+        const xpGained = results.reduce((totalXp, result) => {
+            if (result.isCorrect) {
+                // Award half XP if a hint was used, full XP otherwise.
+                const xpForThisAnswer = result.hintUsed ? XP_PER_CORRECT_ANSWER / 2 : XP_PER_CORRECT_ANSWER;
+                return totalXp + xpForThisAnswer;
+            }
+            return totalXp;
+        }, 0);
 
-          const newUnlockedBadges = [...prev.stats.unlockedBadges];
-          BADGES.forEach(badge => {
-            if (!newUnlockedBadges.includes(badge.id)) {
-              const hasUnlocked = (badge.type === 'xp' && prev.stats.xp >= badge.value) ||
-                                (badge.type === 'time' && newTotalTime >= badge.value);
-              if (hasUnlocked) {
+        const newXp = Math.max(0, prev.stats.xp + xpGained - penalty);
+        const newLevel = Math.floor(newXp / XP_PER_LEVEL) + 1;
+
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        const lastSessionWasYesterday = prev.stats.lastSessionDate === yesterday.toISOString().split('T')[0];
+        const lastSessionWasToday = prev.stats.lastSessionDate === todayStr;
+        const newStreak = lastSessionWasYesterday ? prev.stats.studyStreak + 1 : (lastSessionWasToday ? prev.stats.studyStreak : 1);
+
+        const newActivity = { ...prev.stats.activity, [todayStr]: (prev.stats.activity[todayStr] || 0) + durationSeconds };
+        const newTotalTime = prev.stats.totalStudyTimeSeconds + durationSeconds;
+        
+        const newUnlockedBadges = [...prev.stats.unlockedBadges];
+        BADGES.forEach(badge => {
+            if (!newUnlockedBadges.includes(badge.id) && ((badge.type === 'xp' && newXp >= badge.value) || (badge.type === 'time' && newTotalTime >= badge.value))) {
                 newUnlockedBadges.push(badge.id);
                 setUnlockedBadgeNotification(badge);
-              }
             }
-          });
+        });
 
-          return { 
-              ...prev, 
-              stats: {
+        return {
+            ...prev,
+            tables: updatedTables,
+            stats: {
                 ...prev.stats,
-                studyStreak: newStreak, 
-                lastSessionDate: todayStr, 
+                xp: newXp,
+                level: newLevel,
+                studyStreak: newStreak,
+                lastSessionDate: todayStr,
                 activity: newActivity,
-                totalStudyTimeSeconds: newTotalTime, 
+                totalStudyTimeSeconds: newTotalTime,
                 unlockedBadges: newUnlockedBadges,
-              }
-          };
-      });
+            }
+        };
+    };
 
-      setCurrentScreen(Screen.Home); // Go home after a session
-      setActiveSession(null);
-  }
+    const handleEndSession = (results: SessionWordResult[], durationSeconds: number) => {
+        setAndMarkDirty(prev => processSessionResults(prev, results, durationSeconds, 0));
+        setCurrentScreen(Screen.Home);
+        setActiveSession(null);
+    };
+
+    const handleSessionQuit = (results: SessionWordResult[], durationSeconds: number, remainingQueue: Question[]) => {
+        const remainingIds = new Set(remainingQueue.map(q => q.rowId));
+        setAndMarkDirty(prev => processSessionResults(prev, results, durationSeconds, XP_QUIT_PENALTY, remainingIds));
+        setCurrentScreen(Screen.Home);
+        setActiveSession(null);
+    };
 
   // --- Flashcard Logic ---
     const handleStartFlashcardSession = (tableIds: string[], relationIds: string[]) => {
@@ -527,7 +596,7 @@ function App() {
         const sessionDurationSeconds = Math.round((Date.now() - finalSession.startTime) / 1000);
         const todayStr = new Date().toISOString().split('T')[0];
 
-        setState(prev => {
+        setAndMarkDirty(prev => {
             const updatedTables = prev.tables.map(table => {
                 if (!tableIds.includes(table.id)) return table;
                 
@@ -539,7 +608,7 @@ function App() {
                     return {
                         ...row,
                         stats: {
-                            ...row,
+                            ...row.stats,
                             flashcardStatus: lastStatus,
                             flashcardEncounters: row.stats.flashcardEncounters + rowHistory.length,
                             isFlashcardReviewed: true,
@@ -592,25 +661,14 @@ function App() {
             session={activeFlashcardSession}
             tables={tables}
             onFinish={handleFinishFlashcardSession}
-            onUpdateRow={(row) => handleUpdateTable({...tables.find(t => t.rows.some(w => w.id === row.id))!, rows: tables.find(t => t.rows.some(w => w.id === row.id))!.rows.map(w => w.id === row.id ? row : w)})}
-            onSaveToJournal={(cardFront, cardBack) => {
-                const today = new Date().toISOString().split('T')[0];
-                const journalTitle = `Journal - ${today}`;
-                let todayNote = notes.find(n => n.title === journalTitle);
-                const contentToAppend = `\n\n---\n**Flashcard Review:**\n*Q: ${cardFront}*\n*A: ${cardBack}*\n`;
-
-                if (todayNote) {
-                    handleUpdateNote({ ...todayNote, content: todayNote.content + contentToAppend });
-                } else {
-                    const newNote: Note = {
-                        id: Date.now().toString(),
-                        title: journalTitle,
-                        content: `New journal entry for ${today}.${contentToAppend}`,
-                        createdAt: Date.now(),
-                    };
-                    setState(prev => ({...prev, notes: [...prev.notes, newNote]}));
-                }
+            onUpdateRow={(row) => {
+              const tableToUpdate = tables.find(t => t.rows.some(w => w.id === row.id));
+              if (tableToUpdate) {
+                const newRows = tableToUpdate.rows.map(w => w.id === row.id ? row : w);
+                handleUpdateTable({...tableToUpdate, rows: newRows});
+              }
             }}
+            onSaveToJournal={handleSaveToJournal}
         />
     }
 
@@ -647,25 +705,25 @@ function App() {
           return <VmindScreen 
             onBack={() => setCurrentScreen(Screen.Home)}
             onNavigateToReading={() => setCurrentScreen(Screen.Reading)}
-            onNavigateToJournal={() => alert("Journal coming soon!")}
+            onNavigateToJournal={() => setCurrentScreen(Screen.Journal)}
             onNavigateToFlashcards={() => setCurrentScreen(Screen.Flashcards)}
             onStartStudySession={() => setCurrentScreen(Screen.StudySetup)}
           />;
       case Screen.Rewards:
           return <RewardsScreen stats={stats} allBadges={BADGES} />;
       case Screen.Settings:
-          return <SettingsScreen onLogout={handleLogout} onToggleTheme={handleToggleTheme} theme={theme} isGuest={isGuest}/>;
+          return <SettingsScreen onLogout={handleLogout} onToggleTheme={handleToggleTheme} theme={theme} isGuest={isGuest} settings={settings} onUpdateSettings={handleUpdateSettings}/>;
       case Screen.TableDetail:
-        return activeTable && <TableScreen table={activeTable} onBack={() => setCurrentScreen(Screen.Tables)} onUpdateTable={handleUpdateTable} onStartStudySession={handleStartStudySession} onNavigateToVmind={() => setCurrentScreen(Screen.Vmind)} isGuest={isGuest} onShowToast={showToast}/>;
+        return activeTable && <TableScreen table={activeTable} onBack={() => setCurrentScreen(Screen.Tables)} onUpdateTable={handleUpdateTable} onStartStudySession={() => {}} onNavigateToVmind={() => setCurrentScreen(Screen.Vmind)} isGuest={isGuest} onShowToast={showToast}/>;
       case Screen.StudySession:
-          return activeSession && <StudySessionScreen session={activeSession} onAnswer={handleAnswer} onEndSession={() => { setCurrentScreen(Screen.Home); setActiveSession(null);}} />
+          return activeSession && <StudySessionScreen session={activeSession} tables={tables} settings={settings} onEndSession={handleEndSession} onSessionQuit={handleSessionQuit} onSaveToJournal={handleSaveToJournal} />
       case Screen.Flashcards:
           return <FlashcardsScreen tables={tables} onStartSession={handleStartFlashcardSession} />;
       case Screen.StudySetup:
           return <StudySetupScreen
             tables={tables}
             onBack={() => setCurrentScreen(Screen.Vmind)}
-            onStartSession={handleStartFlashcardSession}
+            onStartSession={handleStartStudySession}
           />;
       case Screen.Reading:
           return <ReadingScreen 
@@ -677,6 +735,13 @@ function App() {
             onDeleteNote={handleDeleteNote}
             onUpdateTable={handleUpdateTable}
             onShowToast={showToast}
+            onSaveToJournal={handleSaveToJournal}
+          />;
+      case Screen.Journal:
+          return <JournalScreen
+            notes={notes}
+            onUpdateNote={handleUpdateNote}
+            onBack={() => setCurrentScreen(Screen.Vmind)}
           />;
       default:
         return null;
@@ -684,9 +749,18 @@ function App() {
   };
 
   const showNavBar = currentScreen !== Screen.Auth && currentScreen !== Screen.StudySession && currentScreen !== Screen.FlashcardSession;
+  
+  function shuffleArray<T>(array: T[]): T[] {
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
+  }
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-gray-100 transition-colors duration-300">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 transition-colors duration-300">
       <main className={showNavBar ? 'pb-20' : ''}>
         {renderContent()}
       </main>

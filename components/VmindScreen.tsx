@@ -15,7 +15,7 @@ const VmindScreen: React.FC<VmindScreenProps> = ({ onBack, onStartStudySession, 
     { name: 'Study Session', icon: 'brain', description: 'Customizable quiz with various question types.', enabled: true, action: onStartStudySession },
     { name: 'Reading Space', icon: 'file-text', description: 'Extract vocabulary from texts and notes.', enabled: true, action: onNavigateToReading },
     { name: 'Flashcards', icon: 'credit-card', description: 'Classic review with Spaced Repetition.', enabled: true, action: onNavigateToFlashcards },
-    { name: 'Journal', icon: 'pencil', description: 'Reflect on your learning and write freely.', enabled: false, action: onNavigateToJournal },
+    { name: 'Journal', icon: 'pencil', description: 'View your automated study log.', enabled: true, action: onNavigateToJournal },
     { name: 'Sentence Scramble', icon: 'table-cells', description: 'Unscramble sentence fragments to test recall.', enabled: false },
     { name: 'Dictation', icon: 'play', description: 'Listen to audio and type what you hear.', enabled: false },
   ];
@@ -24,7 +24,7 @@ const VmindScreen: React.FC<VmindScreenProps> = ({ onBack, onStartStudySession, 
     <div className="p-4 sm:p-6 max-w-4xl mx-auto animate-fadeIn">
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Learning Center</h1>
-        <p className="text-sm text-slate-500 dark:text-gray-400">Choose your learning mode</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Choose your learning mode</p>
       </header>
       
       <main className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -46,14 +46,14 @@ const VmindScreen: React.FC<VmindScreenProps> = ({ onBack, onStartStudySession, 
               transition-colors
               ${mode.enabled 
                 ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400' 
-                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-gray-400'}
+                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}
             `}>
               <Icon name={mode.icon} className="w-6 h-6" />
             </div>
             <h3 className="font-semibold text-base text-slate-800 dark:text-white mb-1">{mode.name}</h3>
-            <p className="text-xs text-slate-500 dark:text-gray-400 flex-grow">{mode.description}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 flex-grow">{mode.description}</p>
             {!mode.enabled && (
-                <span className="text-xs font-semibold text-slate-400 dark:text-gray-500 mt-3">Coming Soon</span>
+                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 mt-3">Coming Soon</span>
             )}
           </div>
         ))}

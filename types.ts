@@ -92,6 +92,7 @@ export interface VocabRow {
     flashcardEncounters: number;
     isFlashcardReviewed: boolean;
     lastPracticeDate: number | null;
+    wasQuit?: boolean; // For QuitQueue logic
   };
 }
 
@@ -134,6 +135,7 @@ export interface UserStats {
   activity: { [date: string]: number }; // date (YYYY-MM-DD) -> duration in seconds
   totalStudyTimeSeconds: number;
   unlockedBadges: string[];
+  lastLogin?: string | null;
 }
 
 export interface Note {
@@ -143,35 +145,50 @@ export interface Note {
   createdAt: number;
 }
 
+export interface AppSettings {
+  journalMode: 'manual' | 'automatic';
+  // Future settings can be added here
+}
+
 export interface AppState {
     tables: Table[];
     folders: Folder[];
     stats: UserStats;
     notes: Note[];
+    settings: AppSettings;
     savedFlashcardQueues?: Record<string, string[]>; // key: tableIds|relationIds, value: rowId[]
-}
-
-export enum QuestionType {
-  MultipleChoice,
-  Typing,
 }
 
 export interface Question {
   rowId: string;
-  questionSourceColumnNames: string[];
-  questionText: string;
-  correctAnswer: string;
-  type: QuestionType;
-  options?: string[]; // For MultipleChoice
-}
-
-export interface StudySession {
   tableId: string;
   relationId: string;
+  questionSourceColumnNames: string[];
+  questionText: string;
+  proposedAnswer?: string; // For True/False
+  correctAnswer: string;
+  type: StudyMode;
+  options?: string[];
+}
+
+export interface StudySessionData {
   questions: Question[];
-  currentQuestionIndex: number;
-  answers: { [questionIndex: number]: { answer: string; isCorrect: boolean } };
   startTime: number;
+  settings: StudySettings;
+}
+
+export enum SessionItemState {
+  Unseen = 'unseen',
+  Fail = 'fail',
+  Pass1 = 'pass1',
+  Pass2 = 'pass2',
+}
+
+export interface SessionWordResult {
+  rowId: string;
+  isCorrect: boolean;
+  timestamp: number;
+  hintUsed?: boolean;
 }
 
 export interface FlashcardSession {
@@ -182,4 +199,36 @@ export interface FlashcardSession {
   sessionEncounters: number;
   startTime: number;
   history: { rowId: string; status: FlashcardStatus; timestamp: number }[];
+}
+
+
+// --- New: Advanced Study Settings ---
+export type StudySource = {
+    tableId: string;
+    relationId: string;
+};
+
+export type TableModeComposition = {
+    strategy: 'balanced' | 'percentage';
+    percentages: { [tableId: string]: number };
+};
+
+export type CriteriaSort = {
+    field: 'priorityScore' | 'successRate' | 'lastStudied' | 'random';
+    direction: 'asc' | 'desc';
+};
+
+export interface StudySettings {
+    type: 'table' | 'criteria';
+    sources: StudySource[];
+    modes: StudyMode[];
+    randomizeModes?: boolean;
+
+    // Word selection
+    wordSelectionMode: 'auto' | 'manual';
+    wordCount?: number; // Used in 'auto' mode
+    manualWordIds?: string[]; // Used in 'manual' mode
+    
+    // Criteria Mode specific
+    criteriaSorts?: CriteriaSort[];
 }

@@ -31,7 +31,7 @@ const Popover: React.FC<PopoverProps> = ({ trigger, children, isOpen, setIsOpen,
       <div onClick={() => setIsOpen(!isOpen)}>{trigger}</div>
       {isOpen && (
         <div 
-          className={`absolute z-20 mt-2 w-72 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 focus:outline-none right-0 origin-top-right ${contentClassName}`}
+          className={`absolute z-20 mt-2 w-72 rounded-md shadow-lg bg-white dark:bg-slate-800 ring-1 ring-black ring-opacity-5 focus:outline-none right-0 origin-top-right ${contentClassName}`}
           role="menu"
           aria-orientation="vertical"
           aria-labelledby="menu-button"

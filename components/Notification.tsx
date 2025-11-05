@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import * as React from 'react';
 import Icon from './Icon';
 
 interface NotificationProps {
@@ -8,7 +8,7 @@ interface NotificationProps {
 }
 
 const Notification: React.FC<NotificationProps> = ({ message, icon, onClose }) => {
-  useEffect(() => {
+  React.useEffect(() => {
     const timer = setTimeout(() => {
       onClose();
     }, 5000); // Auto-dismiss after 5 seconds

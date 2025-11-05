@@ -95,7 +95,7 @@ interface FlashcardSessionScreenProps {
   tables: Table[];
   onFinish: (session: FlashcardSession) => void;
   onUpdateRow: (row: VocabRow) => void;
-  onSaveToJournal: (cardFront: string, cardBack: string) => void;
+  onSaveToJournal: (source: string, content: string) => void;
 }
 
 const FlashcardSessionScreen: React.FC<FlashcardSessionScreenProps> = ({ session, tables, onFinish, onUpdateRow, onSaveToJournal }) => {
@@ -235,7 +235,7 @@ const FlashcardSessionScreen: React.FC<FlashcardSessionScreenProps> = ({ session
   return (
     <div className="fixed inset-0 bg-slate-100 dark:bg-slate-900 flex flex-col items-center p-4 transition-colors duration-300">
       <header className="w-full max-w-2xl mb-4">
-          <div className="flex justify-between items-center text-slate-500 dark:text-gray-400 mb-2">
+          <div className="flex justify-between items-center text-slate-500 dark:text-slate-400 mb-2">
             <span>Card {currentSession.currentIndex + 1} of {currentSession.queue.length}</span>
             <button onClick={() => onFinish(currentSession)} className="hover:text-slate-800 dark:hover:text-white transition-colors">End Session</button>
           </div>
@@ -249,7 +249,7 @@ const FlashcardSessionScreen: React.FC<FlashcardSessionScreenProps> = ({ session
             <div className="card-container w-full h-full perspective-1000">
                 <div className={`card-flip relative w-full h-full transform-style-3d ${isFlipped ? 'flipped' : ''}`}>
                     {/* Front */}
-                    <div className="card-front absolute w-full h-full flex flex-col items-center justify-center p-4 rounded-lg shadow-lg border dark:border-gray-700" style={getCardFaceStyle(upgradedRelation.design.front)}>
+                    <div className="card-front absolute w-full h-full flex flex-col items-center justify-center p-4 rounded-lg shadow-lg border dark:border-slate-700" style={getCardFaceStyle(upgradedRelation.design.front)}>
                         {upgradedRelation.questionColumnIds.map(id => {
                             const typography = upgradedRelation.design.front.typography[id] || DEFAULT_TYPOGRAPHY;
                             const text = currentRow.cols[id] || `[${currentTable.columns.find(c => c.id === id)?.name}]`;
@@ -258,7 +258,7 @@ const FlashcardSessionScreen: React.FC<FlashcardSessionScreenProps> = ({ session
                          {canPlayFrontAudio && <button onClick={(e) => {e.stopPropagation(); handlePlayAudio(cardFrontText)}} className="absolute bottom-4 right-4 text-slate-400 hover:text-emerald-500"><Icon name="play" className="w-6 h-6"/></button>}
                     </div>
                     {/* Back */}
-                    <div className="card-back absolute w-full h-full flex flex-col items-center justify-center p-4 rounded-lg shadow-lg border dark:border-gray-700" style={getCardFaceStyle(upgradedRelation.design.back)}>
+                    <div className="card-back absolute w-full h-full flex flex-col items-center justify-center p-4 rounded-lg shadow-lg border dark:border-slate-700" style={getCardFaceStyle(upgradedRelation.design.back)}>
                         {upgradedRelation.answerColumnIds.map(id => {
                             const typography = upgradedRelation.design.back.typography[id] || DEFAULT_TYPOGRAPHY;
                             const text = currentRow.cols[id] || `[${currentTable.columns.find(c => c.id === id)?.name}]`;
@@ -292,10 +292,10 @@ const FlashcardSessionScreen: React.FC<FlashcardSessionScreenProps> = ({ session
             <button onClick={() => {
               const frontText = upgradedRelation.questionColumnIds.map(id => currentRow.cols[id]).filter(Boolean).join(' / ');
               const backText = upgradedRelation.answerColumnIds.map(id => currentRow.cols[id]).filter(Boolean).join(' / ');
-              onSaveToJournal(frontText, backText);
+              onSaveToJournal("Flashcard Review", `*Q: ${frontText}*\n*A: ${backText}*`);
             }} title="Save to Journal" className="p-2 rounded-full bg-white dark:bg-slate-700 text-slate-500 hover:text-emerald-500 shadow-sm"><Icon name="book" className="w-5 h-5"/></button>
           </div>
-          <div className="text-xs text-slate-500 dark:text-gray-400">
+          <div className="text-xs text-slate-500 dark:text-slate-400">
               Session Time: {Math.floor((Date.now() - currentSession.startTime) / 60000)}m
           </div>
       </footer>

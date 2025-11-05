@@ -1,138 +1,482 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { StudySession, QuestionType } from '../types';
+import * as React from 'react';
+import { StudySessionData, Question, SessionItemState, SessionWordResult, Table, VocabRow, StudyMode, Relation, RelationDesign, CardFaceDesign, TypographyDesign, AppSettings } from '../types';
 import Icon from './Icon';
+import { playSpeech, stopSpeech } from '../services/audioService';
+import { regenerateQuestionForRow } from '../utils/studySessionGenerator';
+import ConfirmationModal from './ConfirmationModal';
+import { generateSpeech, generateExampleSentence, generateHint } from '../services/geminiService';
 
-interface StudySessionScreenProps {
-  session: StudySession;
-  onAnswer: (questionIndex: number, answer: string, isCorrect: boolean) => void;
-  onEndSession: () => void;
+
+// --- Audio Decoding Helpers (for Gemini TTS) ---
+function decode(base64: string) {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
 }
 
-const StudySessionScreen: React.FC<StudySessionScreenProps> = ({ session, onAnswer, onEndSession }) => {
-  const [currentAnswer, setCurrentAnswer] = useState('');
-  const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(null);
-  const [shake, setShake] = useState(false);
+async function decodeAudioData(
+  data: Uint8Array,
+  ctx: AudioContext,
+  sampleRate: number,
+  numChannels: number,
+): Promise<AudioBuffer> {
+  const dataInt16 = new Int16Array(data.buffer);
+  const frameCount = dataInt16.length / numChannels;
+  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
 
-  const currentQuestion = session.questions[session.currentQuestionIndex];
-  const answered = session.answers[session.currentQuestionIndex] !== undefined;
+  for (let channel = 0; channel < numChannels; channel++) {
+    const channelData = buffer.getChannelData(channel);
+    for (let i = 0; i < frameCount; i++) {
+      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+    }
+  }
+  return buffer;
+}
 
-  useEffect(() => {
-    setCurrentAnswer('');
+
+// --- UI Sub-Components for Different Question Types ---
+
+const McqQuestionUI: React.FC<{ question: Question; onAnswer: (answer: string) => void; answered: boolean; currentAnswer: string }> = ({ question, onAnswer, answered, currentAnswer }) => {
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {(question.options || []).map((option, index) => {
+                const isCorrect = option === question.correctAnswer;
+                let buttonClass = "bg-slate-200/70 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-white";
+                if (answered) {
+                    if (isCorrect) buttonClass = "bg-emerald-500/80 text-white";
+                    else if (currentAnswer === option && !isCorrect) buttonClass = "bg-red-500/80 text-white";
+                    else buttonClass = "bg-slate-200/50 dark:bg-slate-700 opacity-60 text-slate-600 dark:text-slate-300";
+                }
+                return (
+                  <button type="button" key={index} onClick={() => onAnswer(option)} disabled={answered}
+                    className={`p-3 rounded-lg text-left font-medium transition-all duration-200 ${buttonClass}`}>
+                    {option}
+                  </button>
+                );
+            })}
+        </div>
+    );
+};
+
+const TfQuestionUI: React.FC<{ onAnswer: (answer: string) => void; answered: boolean; }> = ({ onAnswer, answered }) => (
+    <div className="grid grid-cols-2 gap-3">
+        <button onClick={() => onAnswer('True')} disabled={answered} className="p-4 rounded-lg font-bold text-lg bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900 transition-colors disabled:opacity-50">True</button>
+        <button onClick={() => onAnswer('False')} disabled={answered} className="p-4 rounded-lg font-bold text-lg bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900 transition-colors disabled:opacity-50">False</button>
+    </div>
+);
+
+const TypingQuestionUI: React.FC<{ onAnswer: (answer: string) => void; answered: boolean }> = ({ onAnswer, answered }) => {
+    const [typingAnswer, setTypingAnswer] = React.useState('');
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onAnswer(typingAnswer);
+    };
+    return (
+        <form onSubmit={handleSubmit}>
+            <input
+              type="text"
+              value={typingAnswer}
+              onChange={(e) => setTypingAnswer(e.target.value)}
+              disabled={answered}
+              placeholder="Type your answer..."
+              autoFocus
+              className="w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-4 py-3 text-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition mb-2"
+            />
+            <button type="submit" disabled={answered || !typingAnswer.trim()}
+              className="w-full bg-emerald-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              Check Answer
+            </button>
+        </form>
+    );
+};
+
+// --- Other Sub-Components ---
+
+const FullExplanationPanel: React.FC<{ question: Question, tables: Table[] }> = ({ question, tables }) => {
+    const table = tables.find(t => t.id === question.tableId);
+    const row = table?.rows.find(r => r.id === question.rowId);
+
+    if (!row || !table) return null;
+
+    return (
+        <div className="mt-3 p-3 bg-slate-100 dark:bg-slate-700/50 rounded-lg">
+            <h4 className="font-bold text-sm text-slate-700 dark:text-slate-200 mb-2">Full Details</h4>
+            <div className="space-y-1">
+                {table.columns.map(col => (
+                    <div key={col.id} className="grid grid-cols-3 gap-2 text-xs">
+                        <span className="font-semibold text-slate-500 dark:text-slate-400 truncate">{col.name}</span>
+                        <span className="col-span-2 text-slate-800 dark:text-slate-300">{row.cols[col.id] || '-'}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const TopTracker: React.FC<{ wordStates: { [key: string]: SessionItemState }; questionOrder: string[]; sessionQueue: Question[]; showWords: boolean; }> = ({ wordStates, questionOrder, sessionQueue, showWords }) => {
+    const questionsById = React.useMemo(() => sessionQueue.reduce((acc, q) => ({...acc, [q.rowId]: q}), {} as Record<string, Question>), [sessionQueue]);
+    const getStateStyle = (state: SessionItemState) => {
+        switch (state) {
+            case SessionItemState.Unseen: return { bg: 'bg-slate-300 dark:bg-slate-600', text: 'text-slate-600 dark:text-slate-300' };
+            case SessionItemState.Fail: return { bg: 'bg-red-400 dark:bg-red-600', text: 'text-red-800 dark:text-red-200' };
+            case SessionItemState.Pass1: return { bg: 'bg-yellow-400 dark:bg-yellow-600', text: 'text-yellow-800 dark:text-yellow-200' };
+            case SessionItemState.Pass2: return { bg: 'bg-emerald-400 dark:bg-emerald-500', text: 'text-emerald-800 dark:text-emerald-100' };
+        }
+    };
+    if (!showWords) return <div className="flex gap-1 h-2">{questionOrder.map(rowId => <div key={rowId} className={`flex-1 rounded-full transition-colors duration-300 ${getStateStyle(wordStates[rowId]).bg}`}></div>)}</div>;
+    return <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 max-h-32 overflow-y-auto pr-2">{questionOrder.map(rowId => <div key={rowId} className={`p-1.5 rounded-md text-center ${getStateStyle(wordStates[rowId]).bg}`}><span className={`text-xs font-semibold truncate block ${getStateStyle(wordStates[rowId]).text}`}>{questionsById[rowId]?.questionText || '...'}</span></div>)}</div>;
+};
+
+// --- Main Screen ---
+
+interface StudySessionScreenProps {
+  session: StudySessionData;
+  tables: Table[];
+  settings: AppSettings;
+  onEndSession: (results: SessionWordResult[], durationSeconds: number) => void;
+  onSessionQuit: (results: SessionWordResult[], durationSeconds: number, remainingQueue: Question[]) => void;
+  onSaveToJournal: (source: string, content: string) => void;
+}
+
+const DEFAULT_TYPOGRAPHY: TypographyDesign = { color: '#111827', fontSize: '24px', fontFamily: 'sans-serif', textAlign: 'center', fontWeight: 'bold' };
+
+const StudySessionScreen: React.FC<StudySessionScreenProps> = ({ session, tables, settings, onEndSession, onSessionQuit, onSaveToJournal }) => {
+  const [sessionQueue, setSessionQueue] = React.useState<Question[]>([]);
+  const [wordStates, setWordStates] = React.useState<Record<string, SessionItemState>>({});
+  const [wordResults, setWordResults] = React.useState<SessionWordResult[]>([]);
+  
+  const [currentAnswer, setCurrentAnswer] = React.useState('');
+  const [feedback, setFeedback] = React.useState<'correct' | 'incorrect' | null>(null);
+  const [shake, setShake] = React.useState(false);
+  const [isJournaled, setIsJournaled] = React.useState(false);
+  const [isFinished, setIsFinished] = React.useState(false);
+
+  const [speedMode, setSpeedMode] = React.useState(false);
+  const [showWordsInTracker, setShowWordsInTracker] = React.useState(false);
+  const [isConfirmingQuit, setIsConfirmingQuit] = React.useState(false);
+  
+  const [audioState, setAudioState] = React.useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
+  const audioCtx = React.useRef<AudioContext | null>(null);
+  const [cardAnimationClass, setCardAnimationClass] = React.useState('animate-card-flip-in-next');
+
+  const [exampleSentence, setExampleSentence] = React.useState<string | null>(null);
+  const [isSentenceLoading, setIsSentenceLoading] = React.useState(false);
+
+  // New state for hints
+  const [hint, setHint] = React.useState<string | null>(null);
+  const [isHintLoading, setIsHintLoading] = React.useState(false);
+  const [hintUsed, setHintUsed] = React.useState(false);
+
+  const initialQuestionOrder = React.useMemo(() => session.questions.map(q => q.rowId), [session.questions]);
+  const allRowsFromSources = React.useMemo(() => Array.from(new Map(session.settings.sources.flatMap(s => tables.find(t => t.id === s.tableId)?.rows || []).map(r => [r.id, r])).values()), [session.settings.sources, tables]);
+
+  React.useEffect(() => {
+    // Initialize AudioContext on client-side only
+    if (!audioCtx.current) {
+        audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    }
+    setSessionQueue(session.questions);
+    setWordStates(session.questions.reduce((acc, q) => ({ ...acc, [q.rowId]: SessionItemState.Unseen }), {}));
+  }, [session]);
+  
+  const currentQuestion = !isFinished ? sessionQueue[0] : null;
+  const answered = feedback !== null;
+
+  const currentTable = React.useMemo(() => {
+    if (!currentQuestion) return null;
+    return tables.find(t => t.id === currentQuestion.tableId) || null;
+  }, [currentQuestion, tables]);
+
+  const currentRelation = React.useMemo(() => {
+    if (!currentQuestion || !currentTable) return null;
+    return currentTable.relations.find(r => r.id === currentQuestion.relationId) || null;
+  }, [currentQuestion, currentTable]);
+
+  React.useEffect(() => () => stopSpeech(), [currentQuestion]);
+  
+  const advanceQueue = () => {
+    let newQueue = [...sessionQueue];
+    const [answeredQuestion] = newQueue.splice(0, 1);
+    const currentState = wordStates[answeredQuestion.rowId];
+    const isCorrect = wordResults[wordResults.length - 1]?.isCorrect;
+    
+    // Logic for re-queuing or removing a word
+    if (isCorrect && currentState === SessionItemState.Pass1) {
+        // Mastered: Word is correct for the second time, remove it from queue.
+    } else {
+        // Not mastered yet (either incorrect or first time correct): re-insert into queue.
+        const newQuestion = regenerateQuestionForRow(answeredQuestion, allRowsFromSources, tables, session.settings);
+        
+        // If correct (pass1), move to the end. If incorrect (fail), move 2 spots ahead.
+        const reinsertIndex = isCorrect ? newQueue.length : 2;
+        
+        newQueue.splice(reinsertIndex, 0, newQuestion);
+    }
+
     setFeedback(null);
-  }, [session.currentQuestionIndex]);
+    setCurrentAnswer('');
+    setIsJournaled(false);
+    setAudioState('idle');
+    setExampleSentence(null);
+    setIsSentenceLoading(false);
+    setHint(null);
+    setHintUsed(false);
+    setIsHintLoading(false);
+    setSessionQueue(newQueue);
+    if (newQueue.length === 0) setIsFinished(true);
+  };
+  
+  const handleNextQuestion = () => {
+    if (cardAnimationClass !== '') return; // Prevent clicks during animation
+    setCardAnimationClass('animate-card-flip-out-next');
+  };
+  
+  const handleAnimationEnd = () => {
+    if (cardAnimationClass === 'animate-card-flip-out-next') {
+        advanceQueue(); // This changes the question data
+        setCardAnimationClass('animate-card-flip-in-next');
+    } else {
+        setCardAnimationClass(''); // Reset after flip-in is done
+    }
+  };
 
-  const handleSubmit = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (answered || !currentAnswer.trim()) return;
-
-    const isCorrect = currentAnswer.trim().toLowerCase() === currentQuestion.correctAnswer.toLowerCase();
+  const handleAnswer = (answer: string) => {
+    if (answered || !currentQuestion) return;
+    setCurrentAnswer(answer);
+    const isCorrect = answer.trim().toLowerCase() === currentQuestion.correctAnswer.toLowerCase();
     
     setFeedback(isCorrect ? 'correct' : 'incorrect');
-    onAnswer(session.currentQuestionIndex, currentAnswer, isCorrect);
+    if (!isCorrect) { 
+        setShake(true); 
+        setTimeout(() => setShake(false), 300); 
+        if(settings.journalMode === 'automatic') {
+            onSaveToJournal("Quiz Item (Incorrect)", `*Q: ${currentQuestion.questionText}*\n*A: ${currentQuestion.correctAnswer}*`);
+        }
+    }
     
-    if (!isCorrect) {
-        setShake(true);
-        setTimeout(() => setShake(false), 300);
+    setWordResults(prev => [...prev, { rowId: currentQuestion.rowId, isCorrect, timestamp: Date.now(), hintUsed }]);
+
+    const currentState = wordStates[currentQuestion.rowId];
+    const nextState = isCorrect ? (currentState === SessionItemState.Pass1 ? SessionItemState.Pass2 : SessionItemState.Pass1) : SessionItemState.Fail;
+    setWordStates(prev => ({ ...prev, [currentQuestion.rowId]: nextState }));
+
+    if (speedMode) setTimeout(() => handleNextQuestion(), 800);
+  };
+
+  const handlePlayAudio = async () => {
+      if (!currentQuestion || audioState === 'loading') return;
+      
+      const textToSpeak = currentQuestion.questionText;
+      if (!textToSpeak) return;
+
+      // Use advanced Gemini TTS if configured
+      if (currentTable?.audioConfig?.sourceColumnId && currentRelation?.questionColumnIds.includes(currentTable.audioConfig.sourceColumnId)) {
+          setAudioState('loading');
+          try {
+              const audioB64 = await generateSpeech(textToSpeak);
+              if (!audioB64 || !audioCtx.current) throw new Error("Audio generation failed");
+              
+              const audioBytes = decode(audioB64);
+              const audioBuffer = await decodeAudioData(audioBytes, audioCtx.current, 24000, 1);
+              
+              const source = audioCtx.current.createBufferSource();
+              source.buffer = audioBuffer;
+              source.connect(audioCtx.current.destination);
+              source.onended = () => setAudioState('idle');
+              source.start();
+              setAudioState('playing');
+          } catch (error) {
+              console.error("Error playing Gemini audio:", error);
+              setAudioState('error');
+              setTimeout(() => setAudioState('idle'), 2000);
+          }
+      } else {
+          // Fallback to basic browser TTS
+          playSpeech(textToSpeak).catch(err => console.error("Browser TTS error:", err));
+      }
+  };
+  
+  const handleGenerateExample = async () => {
+    if (!currentQuestion) return;
+    setIsSentenceLoading(true);
+    setExampleSentence(null);
+    try {
+        const sentence = await generateExampleSentence(currentQuestion.questionText);
+        setExampleSentence(sentence);
+    } catch (error) {
+        console.error("Failed to generate example sentence:", error);
+        setExampleSentence("Could not generate an example sentence at this time.");
+    } finally {
+        setIsSentenceLoading(false);
+    }
+  };
+  
+  const handleGetHint = async () => {
+    if (!currentQuestion || isHintLoading) return;
+    setIsHintLoading(true);
+    setHintUsed(true);
+    try {
+        const hintText = await generateHint(currentQuestion.questionText, currentQuestion.correctAnswer);
+        setHint(hintText);
+    } catch (error) {
+        setHint("Sorry, couldn't get a hint right now.");
+    } finally {
+        setIsHintLoading(false);
     }
   };
 
-  const progressPercentage = ((session.currentQuestionIndex) / session.questions.length) * 100;
-  
-  const renderInput = () => {
-    if (currentQuestion.type === QuestionType.Typing) {
-      return (
-        <input
-          type="text"
-          value={currentAnswer}
-          onChange={(e) => setCurrentAnswer(e.target.value)}
-          disabled={answered}
-          placeholder="Type your answer..."
-          className="w-full bg-slate-100 dark:bg-gray-700 border border-slate-300 dark:border-gray-600 rounded-lg px-4 py-3 text-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
-        />
-      );
-    }
-    
-    if (currentQuestion.type === QuestionType.MultipleChoice && currentQuestion.options) {
-      return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {currentQuestion.options.map((option, index) => {
-            const isSelected = currentAnswer === option;
-            const isCorrect = option === currentQuestion.correctAnswer;
-            let buttonClass = "bg-slate-200/70 dark:bg-gray-700 hover:bg-slate-200 dark:hover:bg-gray-600 text-slate-700 dark:text-white";
-            if (answered) {
-              if (isCorrect) {
-                buttonClass = "bg-emerald-500/80 text-white";
-              } else if (isSelected && !isCorrect) {
-                buttonClass = "bg-red-500/80 text-white";
-              } else {
-                 buttonClass = "bg-slate-200/50 dark:bg-gray-700 opacity-60 text-slate-600 dark:text-gray-300";
-              }
-            }
-            
-            return (
-              <button
-                key={index}
-                onClick={() => {
-                    if(!answered) setCurrentAnswer(option);
-                }}
-                disabled={answered}
-                className={`p-3 rounded-lg text-left font-medium transition-all duration-200 ${buttonClass}`}
-              >
-                {option}
-              </button>
-            );
-          })}
-        </div>
-      );
-    }
-    return null;
+  const handleFinish = () => onEndSession(wordResults, Math.round((Date.now() - session.startTime) / 1000));
+  const performQuit = () => onSessionQuit(wordResults, Math.round((Date.now() - session.startTime) / 1000), sessionQueue);
+  const handleSaveJournalClick = () => {
+    if (!currentQuestion) return;
+    onSaveToJournal("Quiz Item", `*Q: ${currentQuestion.questionText}*\n*A: ${currentQuestion.correctAnswer}*`);
+    setIsJournaled(true);
   };
+
+  const getCardStyle = (): React.CSSProperties => {
+      if (!currentRelation?.design) return {};
+      const design = currentRelation.design.front;
+      let background = design.backgroundValue;
+      if (design.backgroundType === 'gradient' && design.backgroundValue.includes(',')) {
+          background = `linear-gradient(${design.gradientAngle}deg, ${design.backgroundValue.split(',').join(', ')})`;
+      } else if (design.backgroundType === 'image') {
+          background = `url("${design.backgroundValue}") center/cover no-repeat, #f0f0f0`;
+      }
+      return { background };
+  };
+
+  const getTypographyStyle = (columnId: string): React.CSSProperties => {
+      const typo = currentRelation?.design?.front.typography[columnId] || DEFAULT_TYPOGRAPHY;
+      return { color: typo.color, fontSize: typo.fontSize, fontFamily: typo.fontFamily, fontWeight: typo.fontWeight, textAlign: typo.textAlign };
+  };
+
+  if (isFinished) {
+      const correctCount = wordResults.filter(r => r.isCorrect).length;
+      const mastery = Math.round((correctCount / wordResults.length) * 100) || 0;
+      const wordPerformance = initialQuestionOrder.map(rowId => {
+          const results = wordResults.filter(r => r.rowId === rowId);
+          const correct = results.filter(r => r.isCorrect).length;
+          const incorrect = results.length - correct;
+          const questionText = session.questions.find(q=>q.rowId === rowId)?.questionText || "N/A";
+          return { rowId, questionText, correct, incorrect, score: correct - incorrect * 2 };
+      }).sort((a,b) => a.score - b.score);
+      
+      const mostDifficult = wordPerformance.slice(0, 3);
+
+      return (
+          <div className="fixed inset-0 bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-start pt-8 sm:pt-16 overflow-y-auto p-4 animate-fadeIn">
+              <div className="w-full max-w-md text-center">
+                <h2 className="text-3xl font-bold text-emerald-500 mb-2">Session Complete!</h2>
+                <p className="text-lg text-slate-600 dark:text-slate-300 mb-2">You achieved {mastery}% mastery.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">{correctCount} correct answers out of {wordResults.length} attempts.</p>
+              </div>
+              <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow-inner w-full max-w-md mb-4">
+                <h3 className="font-bold text-slate-700 dark:text-slate-200 text-center mb-3">Words to Review</h3>
+                <div className="space-y-2">
+                    {mostDifficult.map(p => <div key={p.rowId} className="flex justify-between items-center text-xs p-2 rounded bg-slate-100 dark:bg-slate-700/50"><span className="font-semibold truncate pr-2">{p.questionText}</span><div className="flex gap-2"><span className="text-emerald-500 font-bold">✓ {p.correct}</span><span className="text-red-500 font-bold">✗ {p.incorrect}</span></div></div>)}
+                </div>
+              </div>
+              <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow-inner w-full max-w-md mb-6">
+                <h3 className="font-bold text-slate-700 dark:text-slate-200 text-center mb-3">Full Session Report</h3>
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                    {wordPerformance.map(p => (
+                      <div key={p.rowId} className="flex justify-between items-center text-xs p-2 rounded bg-slate-100 dark:bg-slate-700/50">
+                        <span className="font-semibold truncate pr-2">{p.questionText}</span>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <span className="text-emerald-500 font-bold">✓ {p.correct}</span>
+                          <span className="text-red-500 font-bold">✗ {p.incorrect}</span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+              <button onClick={handleFinish} className="bg-emerald-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-emerald-700 transition-colors flex-shrink-0">Finish & Save Progress</button>
+          </div>
+      );
+  }
+
+  if (!currentQuestion) return <div className="fixed inset-0 bg-slate-50 dark:bg-slate-900 flex items-center justify-center"><Icon name="spinner" className="w-8 h-8 animate-spin text-emerald-500"/></div>;
 
   return (
-    <div className="fixed inset-0 bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-center p-4 animate-fadeIn transition-colors duration-300">
-      <div className="w-full max-w-lg">
-        <header className="w-full mb-6">
-          <div className="flex justify-between items-center text-slate-500 dark:text-gray-400 mb-2">
-            <span>Question {session.currentQuestionIndex + 1} of {session.questions.length}</span>
-            <button onClick={onEndSession} className="hover:text-slate-800 dark:hover:text-white transition-colors">Quit</button>
-          </div>
-          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5">
-            <div className="bg-emerald-500 h-2.5 rounded-full transition-all duration-300" style={{ width: `${progressPercentage}%` }}></div>
+    <>
+    <ConfirmationModal isOpen={isConfirmingQuit} onClose={() => setIsConfirmingQuit(false)} onConfirm={performQuit} title="End Session?" message="Are you sure? Your progress will be saved." confirmText="End Session" />
+    <div className="fixed inset-0 bg-slate-50 dark:bg-slate-900 flex flex-col items-center justify-center p-4 transition-colors duration-300">
+      <div className="w-full max-w-lg perspective-1000">
+        <header className="w-full mb-4">
+          <div className="flex justify-between items-center text-slate-500 dark:text-slate-400 mb-2">
+            <button onClick={() => setIsConfirmingQuit(true)} className="p-1 rounded-full hover:text-slate-800 dark:hover:text-white transition-colors"><Icon name="x" className="w-6 h-6" /></button>
+            <div className="flex items-center gap-2 text-xs"><span>Speed Mode</span><button onClick={() => setSpeedMode(!speedMode)} className={`w-10 h-5 flex items-center rounded-full p-1 transition-colors ${speedMode ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}><span className={`w-3.5 h-3.5 bg-white rounded-full transition-transform ${speedMode ? 'translate-x-5' : ''}`}></span></button></div>
           </div>
         </header>
         
-        <main className={`bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-6 shadow-lg transition-transform duration-300 ${shake ? 'animate-shake' : ''}`}>
-          <p className="text-slate-500 dark:text-gray-400 mb-2 text-sm uppercase">{currentQuestion.questionSourceColumnNames.join(' + ')}</p>
-          <div className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-white mb-6 min-h-[40px]">
-            {currentQuestion.questionText}
+        <main onAnimationEnd={handleAnimationEnd} className={`bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 shadow-lg transform-style-3d ${shake ? 'animate-shake' : ''} ${cardAnimationClass}`} style={getCardStyle()}>
+           <div className="mb-4"><div className="flex justify-between items-center mb-2"><h3 className="text-sm font-semibold uppercase text-slate-500 dark:text-slate-400">Session Progress</h3><button onClick={() => setShowWordsInTracker(!showWordsInTracker)} className="text-slate-400 hover:text-emerald-500 p-1" title={showWordsInTracker ? "Hide" : "Show"}><Icon name="eye" className="w-5 h-5"/></button></div><TopTracker wordStates={wordStates} questionOrder={initialQuestionOrder} sessionQueue={sessionQueue} showWords={showWordsInTracker}/></div>
+          
+           <div className="relative">
+              <p className="text-slate-500 dark:text-slate-400 mb-2 text-sm uppercase" style={{ color: currentRelation?.design?.front.typography[currentQuestion.relationId]?.color }}>{currentQuestion.questionSourceColumnNames.join(' + ')}</p>
+              <div className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-white mb-6 min-h-[40px] flex items-center gap-3" style={getTypographyStyle(currentQuestion.relationId)}>
+                <span>{currentQuestion.questionText}</span>
+                {currentQuestion.type === StudyMode.TrueFalse && <span className="text-base font-normal text-slate-500 dark:text-slate-400">is "{currentQuestion.proposedAnswer}"</span>}
+                 <button onClick={handlePlayAudio} disabled={audioState === 'loading'} className="text-slate-400 hover:text-emerald-500 disabled:opacity-50 disabled:cursor-wait">
+                    {audioState === 'loading' ? <Icon name="spinner" className="w-6 h-6 animate-spin"/> : <Icon name="play" className="w-6 h-6"/>}
+                 </button>
+              </div>
+               {settings.journalMode === 'manual' && !answered && <button onClick={handleSaveJournalClick} disabled={isJournaled} title="Save to Journal" className="absolute top-0 right-0 p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-black/10 disabled:opacity-50"><Icon name="book" className="w-5 h-5"/></button>}
           </div>
           
-          <form onSubmit={handleSubmit}>
-            {renderInput()}
-            
-            <div className="mt-4 min-h-[60px]">
-              {answered && feedback && (
-                  <div className={`flex items-center p-3 rounded-lg animate-fadeIn ${feedback === 'correct' ? 'bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-red-500/10 text-red-700 dark:bg-red-500/20 dark:text-red-300'}`}>
-                    <Icon name={feedback === 'correct' ? 'check' : 'x'} className="w-5 h-5 mr-3"/>
-                    <div>
-                      <p className="font-bold text-sm">{feedback === 'correct' ? 'Correct!' : 'Incorrect'}</p>
-                      {feedback === 'incorrect' && <p className="text-sm">Answer: <span className="font-bold">{currentQuestion.correctAnswer}</span></p>}
-                    </div>
-                  </div>
-              )}
-            </div>
+          <div className="min-h-[140px]">
+          {!answered ? (
+            <>
+              {currentQuestion.type === StudyMode.Typing && <TypingQuestionUI onAnswer={handleAnswer} answered={answered}/>}
+              {currentQuestion.type === StudyMode.MultipleChoice && <McqQuestionUI question={currentQuestion} onAnswer={handleAnswer} answered={answered} currentAnswer={currentAnswer}/>}
+              {currentQuestion.type === StudyMode.TrueFalse && <TfQuestionUI onAnswer={handleAnswer} answered={answered}/>}
+              
+              <div className="mt-2 text-center">
+                  <button onClick={handleGetHint} disabled={isHintLoading || !!hint} className="text-sm font-semibold text-cyan-600 dark:text-cyan-400 hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
+                      {isHintLoading ? 'Getting hint...' : (hint ? 'Hint given' : 'Need a hint?')}
+                  </button>
+                  {hint && <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 italic">"{hint}"</p>}
+              </div>
 
-            <button
-              type="submit"
-              disabled={answered || !currentAnswer.trim()}
-              className="w-full mt-2 bg-emerald-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {answered ? 'Next Question' : 'Check Answer'}
-            </button>
-          </form>
+            </>
+          ) : (
+             <div className="animate-fadeIn">
+                <div className={`flex items-center justify-between p-3 rounded-lg ${feedback === 'correct' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'bg-red-500/10 text-red-700 dark:text-red-300'}`}>
+                    <div className="flex items-center"><Icon name={feedback === 'correct' ? 'check' : 'x'} className="w-5 h-5 mr-3"/><div><p className="font-bold text-sm">{feedback === 'correct' ? 'Correct!' : 'Incorrect'}</p>{feedback === 'incorrect' && <p className="text-sm">Answer: <span className="font-bold">{currentQuestion.correctAnswer}</span></p>}</div></div>
+                </div>
+                
+                 <div className="mt-3">
+                    {!exampleSentence && !isSentenceLoading && (
+                        <button onClick={handleGenerateExample} className="w-full text-left flex items-center gap-2 text-sm font-semibold text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/10 p-2 rounded-md transition-colors">
+                            <Icon name="sparkles" className="w-4 h-4" />
+                            Show Example Sentence
+                        </button>
+                    )}
+                    {isSentenceLoading && (
+                        <div className="flex items-center justify-center p-2 text-sm text-slate-500">
+                            <Icon name="spinner" className="w-4 h-4 animate-spin mr-2"/> Generating...
+                        </div>
+                    )}
+                    {exampleSentence && (
+                        <div className="p-3 bg-slate-100 dark:bg-slate-700/50 rounded-lg">
+                             <p className="text-sm text-slate-700 dark:text-slate-300 italic">"{exampleSentence}"</p>
+                        </div>
+                    )}
+                </div>
+
+                <FullExplanationPanel question={currentQuestion} tables={tables}/>
+                {!speedMode && <button type="button" onClick={handleNextQuestion} className="w-full mt-2 bg-slate-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-slate-700 transition-colors">Next</button>}
+             </div>
+          )}
+          </div>
         </main>
       </div>
     </div>
+    </>
   );
 };
 

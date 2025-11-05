@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI, Modality } from "@google/genai";
 
 // This error message will be caught by the UI components.
@@ -59,8 +60,10 @@ export const explainText = async (text: string): Promise<string> => {
 };
 
 export const generateForPrompt = async (promptTemplate: string, sourceValues: Record<string, string>): Promise<string> => {
-  const filledPrompt = promptTemplate.replace(/{{(.*?)}}/g, (_, columnName) => {
-    return sourceValues[columnName.trim()] || `[${columnName.trim()}]`;
+  // Updated regex to handle both {{Column Name}} and {Column Name}
+  const filledPrompt = promptTemplate.replace(/{{\s*(.*?)\s*}}|{\s*(.*?)\s*}/g, (_, p1, p2) => {
+    const columnName = (p1 || p2).trim();
+    return sourceValues[columnName] || `[${columnName}]`;
   });
 
   try {
@@ -108,4 +111,26 @@ export const generateSpeech = async (text: string): Promise<string> => {
     console.error("Error generating speech with Gemini:", error);
     return "";
   }
+};
+
+export const generateHint = async (word: string, context: string): Promise<string> => {
+    try {
+        const ai = getAiClient();
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `The user is trying to guess the word "${word}". The definition or context is "${context}". Provide a short, one-sentence hint to help them guess the word. Do not use the word "${word}" in your hint.`,
+            config: {
+                temperature: 0.8,
+                maxOutputTokens: 40,
+                thinkingConfig: { thinkingBudget: 20 },
+            }
+        });
+        return response.text.trim();
+    } catch (error: any) {
+        if (error.message === API_KEY_ERROR_MESSAGE) {
+            throw error;
+        }
+        console.error("Error generating hint with Gemini:", error);
+        return "Could not generate a hint at this time.";
+    }
 };

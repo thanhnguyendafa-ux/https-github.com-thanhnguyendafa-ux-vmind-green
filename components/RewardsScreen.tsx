@@ -1,5 +1,7 @@
 
-import React from 'react';
+
+
+import * as React from 'react';
 import { Badge, UserStats } from '../types';
 import Icon from './Icon';
 
@@ -38,12 +40,12 @@ const RewardsScreen: React.FC<RewardsScreenProps> = ({ stats, allBadges }) => {
             <div>
                 <div className="flex justify-between items-baseline mb-1">
                     <span className="font-bold text-slate-800 dark:text-white">Level {stats.level}</span>
-                    <span className="text-xs text-slate-500 dark:text-gray-400">{stats.xp.toLocaleString()} XP Total</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{stats.xp.toLocaleString()} XP Total</span>
                 </div>
                 <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
                     <div className="bg-emerald-500 h-2 rounded-full transition-all duration-500" style={{ width: `${progressPercentage}%` }}></div>
                 </div>
-                <p className="text-right text-xs text-slate-500 dark:text-gray-400 mt-1">{currentLevelXp} / {XP_PER_LEVEL} XP</p>
+                <p className="text-right text-xs text-slate-500 dark:text-slate-400 mt-1">{currentLevelXp} / {XP_PER_LEVEL} XP</p>
             </div>
         </div>
 
@@ -59,14 +61,14 @@ const RewardsScreen: React.FC<RewardsScreenProps> = ({ stats, allBadges }) => {
               className={`border rounded-xl p-4 flex flex-col items-center text-center transition-all duration-300 ${isUnlocked ? 'bg-emerald-500/10 dark:bg-emerald-900/40 border-emerald-500/30' : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/50'}`}
             >
               <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-3 transition-all duration-300 ${isUnlocked ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'}`}>
-                <Icon name={badge.icon} className={`w-8 h-8 ${isUnlocked ? 'text-white' : 'text-slate-500 dark:text-gray-400'}`} />
+                <Icon name={badge.icon} className={`w-8 h-8 ${isUnlocked ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
               </div>
-              <h3 className={`font-bold text-base mb-1 ${isUnlocked ? 'text-emerald-800 dark:text-white' : 'text-slate-800 dark:text-gray-300'}`}>{badge.name}</h3>
-              <p className="text-xs text-slate-500 dark:text-gray-400 flex-grow mb-3">{badge.description}</p>
+              <h3 className={`font-bold text-base mb-1 ${isUnlocked ? 'text-emerald-800 dark:text-white' : 'text-slate-800 dark:text-slate-300'}`}>{badge.name}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 flex-grow mb-3">{badge.description}</p>
               
               {!isUnlocked && (
                 <div className="w-full">
-                    <p className="text-xs text-slate-500 dark:text-gray-500 mb-1 text-right">
+                    <p className="text-xs text-slate-500 dark:text-slate-500 mb-1 text-right">
                         {progress.current.toLocaleString()} / {progress.target.toLocaleString()}
                     </p>
                     <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5">

@@ -1,12 +1,13 @@
 
-import React, { ReactNode } from 'react';
+
+import * as React from 'react';
 import Icon from './Icon';
 
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  children: ReactNode;
+  children: React.ReactNode;
   containerClassName?: string;
 }
 
@@ -19,12 +20,12 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, contain
       onClick={onClose}
     >
       <div
-        className={`bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-slate-200 dark:border-gray-700 animate-slideInUp flex flex-col max-h-[90vh] ${containerClassName || 'w-full max-w-md m-4'}`}
+        className={`bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 animate-slideInUp flex flex-col max-h-[90vh] ${containerClassName || 'w-full max-w-md m-4'}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-gray-700 flex-shrink-0">
+        <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
           <h2 className="text-xl font-bold text-slate-800 dark:text-white">{title}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-800 dark:hover:text-white transition-colors">
             <Icon name="x" className="w-6 h-6" />
           </button>
         </div>

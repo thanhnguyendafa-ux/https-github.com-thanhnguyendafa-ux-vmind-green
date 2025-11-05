@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+
+import * as React from 'react';
 import { supabase } from '../services/supabaseClient';
 import Icon from './Icon';
 
@@ -8,12 +9,12 @@ interface AuthScreenProps {
 }
 
 const AuthScreen: React.FC<AuthScreenProps> = ({ onGuestLogin }) => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [isLogin, setIsLogin] = React.useState(true);
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [message, setMessage] = React.useState<string | null>(null);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +43,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onGuestLogin }) => {
       <div className="w-full max-w-sm mx-auto">
         <div className="text-center mb-8">
             <h1 className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-teal-500 mb-2">Vmind</h1>
-            <p className="text-slate-500 dark:text-gray-400">Welcome to your learning space.</p>
+            <p className="text-slate-500 dark:text-slate-400">Welcome to your learning space.</p>
         </div>
         
         <div className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/50 rounded-xl p-6 shadow-lg">
@@ -50,7 +51,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onGuestLogin }) => {
           
           <form onSubmit={handleAuth} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-600 dark:text-gray-300 mb-1" htmlFor="email">Email</label>
+              <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1" htmlFor="email">Email</label>
               <input
                 id="email"
                 type="email"
@@ -61,7 +62,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onGuestLogin }) => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-600 dark:text-gray-300 mb-1" htmlFor="password">Password</label>
+              <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1" htmlFor="password">Password</label>
               <input
                 id="password"
                 type="password"
@@ -92,7 +93,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onGuestLogin }) => {
         </div>
 
         <div className="text-center mt-6">
-            <button onClick={onGuestLogin} className="text-sm text-slate-500 dark:text-gray-400 hover:underline">
+            <button onClick={onGuestLogin} className="text-sm text-slate-500 dark:text-slate-400 hover:underline">
                 Or continue as a guest
             </button>
         </div>
