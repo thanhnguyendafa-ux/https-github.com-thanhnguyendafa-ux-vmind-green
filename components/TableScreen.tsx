@@ -1,16 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
 import * as React from 'react';
 import { Table, VocabRow, Relation, Column, AIPrompt, StudyMode, RelationDesign, CardFaceDesign, FlashcardStatus, TypographyDesign } from '../types';
 import Icon from './Icon';
@@ -759,8 +746,8 @@ const DEFAULT_TYPOGRAPHY: TypographyDesign = {
 };
 
 const DEFAULT_RELATION_DESIGN: RelationDesign = {
-  front: { backgroundType: 'solid', backgroundValue: '#FFFFFF', gradientAngle: 135, typography: {} },
-  back: { backgroundType: 'solid', backgroundValue: '#F9FAFB', gradientAngle: 135, typography: {} }
+  front: { backgroundType: 'solid', backgroundValue: '#FFFFFF', gradientAngle: 135, typography: {}, layout: 'vertical' },
+  back: { backgroundType: 'solid', backgroundValue: '#F9FAFB', gradientAngle: 135, typography: {}, layout: 'vertical' }
 };
 
 const studyModeIcons: { [key in StudyMode]: string } = {
@@ -771,6 +758,29 @@ const studyModeIcons: { [key in StudyMode]: string } = {
     [StudyMode.Scrambled]: 'arrows-right-left',
 };
 
+const designTemplates: { name: string; design: RelationDesign }[] = [
+    {
+        name: 'Minimalist',
+        design: {
+            front: { backgroundType: 'solid', backgroundValue: '#F9FAFB', gradientAngle: 135, typography: { 'default': { color: '#1F2937', fontSize: '24px', fontFamily: 'sans-serif', textAlign: 'center', fontWeight: 'bold' } }, layout: 'vertical' },
+            back: { backgroundType: 'solid', backgroundValue: '#FFFFFF', gradientAngle: 135, typography: { 'default': { color: '#4B5563', fontSize: '18px', fontFamily: 'sans-serif', textAlign: 'center', fontWeight: 'normal' } }, layout: 'vertical' },
+        }
+    },
+    {
+        name: 'Teal Focus',
+        design: {
+            front: { backgroundType: 'gradient', backgroundValue: '#ccfbf1,#f0fdfa', gradientAngle: 45, typography: { 'default': { color: '#134e4a', fontSize: '24px', fontFamily: 'serif', textAlign: 'center', fontWeight: 'bold' } }, layout: 'vertical' },
+            back: { backgroundType: 'solid', backgroundValue: '#FFFFFF', gradientAngle: 135, typography: { 'default': { color: '#115e59', fontSize: '18px', fontFamily: 'serif', textAlign: 'center', fontWeight: 'normal' } }, layout: 'vertical' },
+        }
+    },
+    {
+        name: 'Dark',
+        design: {
+            front: { backgroundType: 'solid', backgroundValue: '#1F2937', gradientAngle: 135, typography: { 'default': { color: '#F9FAFB', fontSize: '24px', fontFamily: 'sans-serif', textAlign: 'center', fontWeight: 'bold' } }, layout: 'vertical' },
+            back: { backgroundType: 'solid', backgroundValue: '#374151', gradientAngle: 135, typography: { 'default': { color: '#D1D5DB', fontSize: '18px', fontFamily: 'sans-serif', textAlign: 'center', fontWeight: 'normal' } }, layout: 'vertical' },
+        }
+    },
+];
 
 const RelationPreviewModal: React.FC<{
     isOpen: boolean;
@@ -781,23 +791,53 @@ const RelationPreviewModal: React.FC<{
     startInDesignMode: boolean;
 }> = ({ isOpen, onClose, relation, table, onSaveDesign, startInDesignMode }) => {
     const [editedRelation, setEditedRelation] = React.useState(relation);
-    const [activeDesignTab, setActiveDesignTab] = React.useState<'Background' | 'Typography' | 'Layout'>('Background');
+    const [activeDesignTab, setActiveDesignTab] = React.useState<'Typography' | 'Background' | 'Layout'>('Typography');
     const [selectedElement, setSelectedElement] = React.useState<{ face: 'front' | 'back', columnId: string } | null>(null);
     const [isFlipped, setIsFlipped] = React.useState(false);
+    const [isTemplatesModalOpen, setIsTemplatesModalOpen] = React.useState(false);
+    const [previewRowIndex, setPreviewRowIndex] = React.useState(0);
+    const [cardFlipClass, setCardFlipClass] = React.useState('');
 
     React.useEffect(() => {
         if (isOpen) {
             setEditedRelation(relation);
             setIsFlipped(false);
             setSelectedElement(null);
-            setActiveDesignTab('Background');
+            setActiveDesignTab('Typography');
+            setPreviewRowIndex(0);
         }
     }, [isOpen, relation]);
+    
+    const applyTemplate = (templateDesign: RelationDesign) => {
+        setEditedRelation(prev => {
+            const newRel = JSON.parse(JSON.stringify(prev));
+            const newDesign = JSON.parse(JSON.stringify(templateDesign));
+            
+            for (const face of ['front', 'back'] as const) {
+                const colIds = face === 'front' ? newRel.questionColumnIds : newRel.answerColumnIds;
+                const baseTypography = (Object.values(newDesign[face].typography)[0] as TypographyDesign) || DEFAULT_TYPOGRAPHY;
+                newDesign[face].typography = {}; // Reset
+                for (const colId of colIds) {
+                    newDesign[face].typography[colId] = { ...baseTypography };
+                }
+            }
+            newRel.design = newDesign;
+            return newRel;
+        });
+        setIsTemplatesModalOpen(false);
+    };
 
-    const handleBackgroundChange = (face: 'front' | 'back', field: keyof Omit<CardFaceDesign, 'typography'>, value: any) => {
+    const handleBackgroundChange = (face: 'front' | 'back', field: keyof Omit<CardFaceDesign, 'typography' | 'layout'>, value: any) => {
         setEditedRelation(prev => ({
             ...prev,
             design: { ...prev.design!, [face]: { ...prev.design![face], [field]: value } }
+        }));
+    };
+    
+    const handleLayoutChange = (face: 'front' | 'back', layout: 'vertical' | 'horizontal') => {
+        setEditedRelation(prev => ({
+            ...prev,
+            design: { ...prev.design!, [face]: { ...prev.design![face], layout } }
         }));
     };
 
@@ -823,6 +863,28 @@ const RelationPreviewModal: React.FC<{
         const key = face === 'front' ? 'questionColumnIds' : 'answerColumnIds';
         setEditedRelation(prev => ({ ...prev, [key]: newOrder }));
     };
+    
+    const handlePreviewCycle = (direction: 'next' | 'prev') => {
+        if (cardFlipClass) return; // Prevent cycling during flip animation
+        const animation = direction === 'next' ? 'animate-card-flip-out-next' : 'animate-card-flip-out-prev';
+        setCardFlipClass(animation);
+    };
+
+    const onFlipAnimationEnd = () => {
+        if (cardFlipClass.includes('out')) {
+            setPreviewRowIndex(prev => {
+                const next = cardFlipClass.includes('next') ? prev + 1 : prev - 1;
+                if (next >= table.rows.length) return 0;
+                if (next < 0) return table.rows.length - 1;
+                return next;
+            });
+            const inAnimation = cardFlipClass.includes('next') ? 'animate-card-flip-in-next' : 'animate-card-flip-in-prev';
+            setCardFlipClass(inAnimation);
+        } else {
+            setCardFlipClass('');
+        }
+    };
+
 
     const FlashcardPreview: React.FC<{
         face: 'front' | 'back';
@@ -845,6 +907,7 @@ const RelationPreviewModal: React.FC<{
         const handleDragStart = (e: React.DragEvent<HTMLDivElement>, id: string) => {
             if (!startInDesignMode) return;
             setDraggedId(id);
+            e.dataTransfer.setData('text/plain', id);
             e.dataTransfer.effectAllowed = 'move';
         };
 
@@ -865,25 +928,26 @@ const RelationPreviewModal: React.FC<{
         };
 
         return (
-            <div className={`absolute w-full h-full rounded-lg shadow-lg border dark:border-slate-700 flex flex-col items-center justify-center p-4 backface-hidden ${face === 'back' ? 'card-back' : 'card-front'}`} style={getCardStyle()}>
+            <div className={`absolute w-full h-full rounded-lg shadow-lg border dark:border-slate-700 flex items-center justify-center p-4 backface-hidden ${face === 'back' ? 'card-back' : 'card-front'}`} style={getCardStyle()}>
                 {columnIds.length === 0 && <span className="text-slate-400">No columns selected for this side.</span>}
-                <div className="w-full space-y-4">
+                <div className={`w-full h-full flex items-center justify-center gap-4 ${faceDesign.layout === 'horizontal' ? 'flex-row' : 'flex-col'}`}>
                     {columnIds.map(id => {
                         const col = table.columns.find(c => c.id === id);
                         const typography = faceDesign.typography[id] || DEFAULT_TYPOGRAPHY;
-                        const sampleText = table.rows[0]?.cols[id];
+                        const sampleText = (table.rows[previewRowIndex] || table.rows[0])?.cols[id];
                         const colName = col?.name;
 
                         return (
                             <div 
                                 key={id} draggable={startInDesignMode} onDragStart={(e) => handleDragStart(e, id)} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, id)}
-                                onClick={() => {
+                                onClick={(e) => {
                                     if (startInDesignMode) {
+                                        e.stopPropagation();
                                         setSelectedElement({ face, columnId: id });
                                         setActiveDesignTab('Typography');
                                     }
                                 }}
-                                className={`w-full p-1 rounded-md transition-all ${startInDesignMode ? 'cursor-pointer' : ''} ${selectedElement?.face === face && selectedElement?.columnId === id ? 'ring-2 ring-emerald-500' : (startInDesignMode ? 'hover:bg-black/10' : '')}`}
+                                className={`w-full p-1 rounded-md transition-all ${draggedId === id ? 'opacity-50' : ''} ${startInDesignMode ? 'cursor-pointer' : ''} ${selectedElement?.face === face && selectedElement?.columnId === id ? 'ring-2 ring-emerald-500' : (startInDesignMode ? 'hover:bg-black/10' : '')}`}
                             >
                                 <div className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400" style={{ fontFamily: typography.fontFamily, textAlign: typography.textAlign }}>{colName}</div>
                                 <div style={{...typography}} className="mt-1 break-words">
@@ -896,16 +960,20 @@ const RelationPreviewModal: React.FC<{
             </div>
         );
     };
+    
+    const currentTypography = selectedElement ? editedRelation.design![selectedElement.face].typography[selectedElement.columnId] : null;
 
     const renderTypographyEditor = () => {
-        if (!selectedElement) return <p className="text-xs text-slate-500 dark:text-slate-400">Click a text element in the preview to style it.</p>;
-        const design = editedRelation.design![selectedElement.face].typography[selectedElement.columnId];
-        if (!design) return null;
+        if (!selectedElement || !currentTypography) return <p className="text-xs text-center text-slate-500 dark:text-slate-400 p-4">Click a text element in the preview to style it.</p>;
+        const design = currentTypography;
+        const textAlignments: TypographyDesign['textAlign'][] = ['left', 'center', 'right'];
+
         return <div className="space-y-3">
-            <div className="flex items-center justify-between"><label className="text-xs">Font Family</label><select value={design.fontFamily} onChange={e => handleTypographyChange('fontFamily', e.target.value)} className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-xs rounded p-1"><option value="sans-serif">Sans-serif</option><option value="serif">Serif</option><option value="monospace">Monospace</option></select></div>
-            <div className="flex items-center justify-between"><label className="text-xs">Font Size</label><select value={design.fontSize} onChange={e => handleTypographyChange('fontSize', e.target.value)} className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-xs rounded p-1"><option>14px</option><option>18px</option><option>24px</option><option>32px</option><option>48px</option></select></div>
-            <div className="flex items-center justify-between"><label className="text-xs">Font Weight</label><select value={design.fontWeight} onChange={e => handleTypographyChange('fontWeight', e.target.value as 'normal' | 'bold')} className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-xs rounded p-1"><option value="normal">Normal</option><option value="bold">Bold</option></select></div>
+            <div className="flex items-center justify-between"><label className="text-xs">Font Family</label><select value={design.fontFamily} onChange={e => handleTypographyChange('fontFamily', e.target.value)} className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-xs rounded p-1"><option value="sans-serif">Sans-serif</option><option value="serif">Serif</option><option value="monospace">Monospace</option></select></div>
+            <div className="flex items-center justify-between"><label className="text-xs">Font Size</label><select value={design.fontSize} onChange={e => handleTypographyChange('fontSize', e.target.value)} className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-xs rounded p-1"><option>14px</option><option>18px</option><option>24px</option><option>32px</option><option>48px</option></select></div>
+            <div className="flex items-center justify-between"><label className="text-xs">Font Weight</label><select value={design.fontWeight} onChange={e => handleTypographyChange('fontWeight', e.target.value as 'normal' | 'bold')} className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-xs rounded p-1"><option value="normal">Normal</option><option value="bold">Bold</option></select></div>
             <div className="flex items-center justify-between"><label className="text-xs">Text Color</label><input type="color" value={design.color} onChange={e => handleTypographyChange('color', e.target.value)} className="h-6 w-10 p-0 border-none bg-transparent"/></div>
+            <div className="flex items-center justify-between"><label className="text-xs">Align</label><div className="flex items-center bg-slate-100 dark:bg-slate-700 rounded-md p-0.5">{textAlignments.map(align => <button key={align} onClick={() => handleTypographyChange('textAlign', align)} className={`p-1 rounded ${design.textAlign === align ? 'bg-white dark:bg-slate-600 shadow' : ''}`}><Icon name={`align-${align}`} className="w-4 h-4 text-slate-600 dark:text-slate-300"/></button>)}</div></div>
         </div>;
     };
 
@@ -915,29 +983,46 @@ const RelationPreviewModal: React.FC<{
         const [gradColor1, gradColor2] = (design.backgroundValue || ',').split(',');
         return <div className="space-y-3">
             <div className="flex items-center justify-between"><label className="text-xs font-semibold">Card Face: {face.toUpperCase()}</label></div>
-            <div className="flex items-center justify-between"><label className="text-xs">Background</label><div className="flex items-center gap-2">{(['solid', 'gradient', 'image'] as const).map(type => <button key={type} onClick={() => handleBackgroundChange(face, 'backgroundType', type)} className={`px-2 py-0.5 text-xs rounded-full ${design.backgroundType === type ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-slate-800'}`}>{type}</button>)}</div></div>
+            <div className="flex items-center justify-between"><label className="text-xs">Background</label><div className="flex items-center gap-2">{(['solid', 'gradient', 'image'] as const).map(type => <button key={type} onClick={() => handleBackgroundChange(face, 'backgroundType', type)} className={`px-2 py-0.5 text-xs rounded-full ${design.backgroundType === type ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-slate-700'}`}>{type}</button>)}</div></div>
             <div>
                 {design.backgroundType === 'solid' && <div className="flex items-center gap-2"><input type="color" value={design.backgroundValue} onChange={e => handleBackgroundChange(face, 'backgroundValue', e.target.value)} className="h-6 w-10 p-0 border-none bg-transparent"/><span className="text-xs">{design.backgroundValue}</span></div>}
                 {design.backgroundType === 'gradient' && <div className="space-y-2"><div className="flex items-center gap-2"><input type="color" value={gradColor1 || '#ffffff'} onChange={e => handleBackgroundChange(face, 'backgroundValue', `${e.target.value},${gradColor2 || '#ffffff'}`)} className="h-6 w-10 p-0 border-none bg-transparent"/><input type="color" value={gradColor2 || '#ffffff'} onChange={e => handleBackgroundChange(face, 'backgroundValue', `${gradColor1 || '#ffffff'},${e.target.value}`)} className="h-6 w-10 p-0 border-none bg-transparent"/></div><div className="flex items-center gap-2"><label className="text-xs">Angle</label><input type="range" min="0" max="360" value={design.gradientAngle} onChange={e => handleBackgroundChange(face, 'gradientAngle', parseInt(e.target.value))} className="w-full"/></div></div>}
-                {design.backgroundType === 'image' && <input type="text" placeholder="Image URL..." value={design.backgroundValue} onChange={e => handleBackgroundChange(face, 'backgroundValue', e.target.value)} className="w-full bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-xs rounded p-1" />}
+                {design.backgroundType === 'image' && <input type="text" placeholder="Image URL..." value={design.backgroundValue} onChange={e => handleBackgroundChange(face, 'backgroundValue', e.target.value)} className="w-full bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-xs rounded p-1" />}
             </div>
-            <button onClick={() => handleBackgroundChange(face, 'backgroundValue', face === 'front' ? '#FFFFFF' : '#F9FAFB')} className="text-xs text-red-500 hover:underline">Remove Background</button>
+        </div>;
+    };
+    
+    const renderLayoutEditor = () => {
+        const face = isFlipped ? 'back' : 'front';
+        const design = editedRelation.design![face];
+        return <div className="space-y-3">
+            <div className="flex items-center justify-between"><label className="text-xs font-semibold">Card Face: {face.toUpperCase()}</label></div>
+            <div className="flex items-center justify-between"><label className="text-xs">Layout</label><div className="flex items-center gap-2">{(['vertical', 'horizontal'] as const).map(type => <button key={type} onClick={() => handleLayoutChange(face, type)} className={`px-2 py-0.5 text-xs rounded-full ${design.layout === type ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-slate-700'}`}>{type}</button>)}</div></div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Drag and drop the text elements in the preview to change their order.</p>
         </div>;
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={startInDesignMode ? "Design Flashcard" : "Preview Flashcard"} containerClassName="w-full max-w-7xl h-[90vh] md:h-[80vh] m-auto p-0 flex flex-col overflow-hidden">
-            <div className={`flex-1 flex flex-col ${startInDesignMode ? 'md:flex-row' : ''} min-h-0`}>
+        <>
+        <Modal isOpen={isOpen} onClose={onClose} title={startInDesignMode ? "Design Flashcard" : "Preview Flashcard"} containerClassName="w-full max-w-7xl h-[90vh] lg:h-[80vh] m-auto p-0 flex flex-col overflow-hidden">
+            <div className={`flex-1 flex flex-col ${startInDesignMode ? 'lg:flex-row' : ''} min-h-0`}>
                 {/* Preview Pane */}
-                <div className="md:flex-1 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8 bg-slate-100 dark:bg-slate-900/50">
-                     <div className="w-full max-w-xl aspect-[1.618] group" onClick={!startInDesignMode ? () => setIsFlipped(!isFlipped) : undefined}>
-                        <div className={`card-container w-full h-full perspective-1000 ${isFlipped ? 'flipped' : ''}`}>
-                            <div className="card-flip relative w-full h-full transform-style-3d">
+                <div className="lg:flex-1 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8 bg-slate-100 dark:bg-slate-900/50 relative">
+                     <div className="w-full max-w-xl aspect-[1.618] group" onClick={() => !startInDesignMode && setIsFlipped(!isFlipped) }>
+                        <div onAnimationEnd={onFlipAnimationEnd} className={`card-container w-full h-full perspective-1000 ${isFlipped ? 'flipped' : ''}`}>
+                            <div className={`card-flip relative w-full h-full transform-style-3d ${cardFlipClass}`}>
                                 <FlashcardPreview face="front" />
                                 <FlashcardPreview face="back" />
                             </div>
                         </div>
                     </div>
+                    {table.rows.length > 1 && (
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4">
+                             <button onClick={() => handlePreviewCycle('prev')} className="p-2 rounded-full bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 disabled:opacity-50" disabled={!!cardFlipClass}><Icon name="arrowLeft" className="w-5 h-5"/></button>
+                             <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{previewRowIndex + 1} / {table.rows.length}</span>
+                             <button onClick={() => handlePreviewCycle('next')} className="p-2 rounded-full bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 disabled:opacity-50" disabled={!!cardFlipClass}><Icon name="arrowRight" className="w-5 h-5"/></button>
+                        </div>
+                    )}
                     {startInDesignMode && (
                         <button onClick={() => setIsFlipped(!isFlipped)} className="mt-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
                             <Icon name="arrows-right-left" className="w-4 h-4"/>
@@ -948,13 +1033,17 @@ const RelationPreviewModal: React.FC<{
 
                 {/* Controls Pane */}
                 {startInDesignMode && (
-                    <div className="w-full md:w-[340px] md:flex-shrink-0 p-4 md:overflow-y-auto border-t md:border-t-0 md:border-l border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                    <div className="w-full lg:w-[340px] lg:flex-shrink-0 p-4 overflow-y-auto border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                        <button onClick={() => setIsTemplatesModalOpen(true)} className="w-full mb-4 bg-cyan-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-cyan-700 transition-colors flex items-center justify-center gap-2 text-sm">
+                            <Icon name="sparkles" className="w-4 h-4"/>
+                            Templates
+                        </button>
                         <div className="border border-slate-200 dark:border-slate-600 rounded-md">
-                            <div className="flex border-b border-slate-200 dark:border-slate-600">{(['Background', 'Typography', 'Layout'] as const).map(tab => <button key={tab} onClick={() => setActiveDesignTab(tab)} className={`flex-1 p-2 text-xs font-semibold ${activeDesignTab === tab ? 'bg-slate-100 dark:bg-slate-700' : 'text-slate-500'}`}>{tab}</button>)}</div>
+                            <div className="flex border-b border-slate-200 dark:border-slate-600">{(['Typography', 'Background', 'Layout'] as const).map(tab => <button key={tab} onClick={() => setActiveDesignTab(tab)} className={`flex-1 p-2 text-xs font-semibold ${activeDesignTab === tab ? 'bg-slate-100 dark:bg-slate-700' : 'text-slate-500'}`}>{tab}</button>)}</div>
                             <div className="p-3">
                                 {activeDesignTab === 'Background' && renderBackgroundEditor()}
                                 {activeDesignTab === 'Typography' && renderTypographyEditor()}
-                                {activeDesignTab === 'Layout' && <p className="text-xs text-slate-500 dark:text-slate-400">Drag and drop the text elements in the preview to change their order.</p>}
+                                {activeDesignTab === 'Layout' && renderLayoutEditor()}
                             </div>
                         </div>
                     </div>
@@ -967,6 +1056,23 @@ const RelationPreviewModal: React.FC<{
                 {startInDesignMode && <button onClick={() => onSaveDesign(editedRelation)} className="bg-emerald-600 text-white font-semibold px-6 py-2 rounded-md hover:bg-emerald-700 transition-colors">Save Design</button>}
             </div>
         </Modal>
+        <Modal isOpen={isTemplatesModalOpen} onClose={() => setIsTemplatesModalOpen(false)} title="Select a Design Template">
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {designTemplates.map(template => (
+                    <div key={template.name} onClick={() => applyTemplate(template.design)} className="cursor-pointer group">
+                        <div 
+                            className="h-32 rounded-lg border-2 border-slate-200 dark:border-slate-600 flex flex-col items-center justify-center p-2 group-hover:border-emerald-500 group-hover:scale-105 transition-all text-center"
+                            style={{ background: template.design.front.backgroundType === 'solid' ? template.design.front.backgroundValue : `linear-gradient(${template.design.front.gradientAngle}deg, ${template.design.front.backgroundValue.split(',').join(', ')})`}}
+                        >
+                            <div style={{...(template.design.front.typography['default'] || DEFAULT_TYPOGRAPHY)}}>Term</div>
+                            <div style={{...(template.design.back.typography['default'] || DEFAULT_TYPOGRAPHY), fontSize: '14px' }} className="mt-2 opacity-75">Definition</div>
+                        </div>
+                        <p className="text-center font-semibold text-sm mt-2 text-slate-700 dark:text-slate-200">{template.name}</p>
+                    </div>
+                ))}
+            </div>
+        </Modal>
+        </>
     );
 };
 
@@ -1126,6 +1232,9 @@ const upgradeRelationDesign = (relation: Relation): Relation => {
         }
         if (faceDesign.backgroundType === 'gradient' && typeof faceDesign.gradientAngle !== 'number') {
             faceDesign.gradientAngle = 135;
+        }
+        if (!faceDesign.layout) {
+            faceDesign.layout = 'vertical';
         }
         delete (faceDesign as any).color;
         delete (faceDesign as any).fontSize;

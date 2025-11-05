@@ -45,6 +45,7 @@ export interface CardFaceDesign {
   backgroundValue: string;
   gradientAngle: number;
   typography: Record<string, TypographyDesign>; // Maps columnId to its style
+  layout: 'vertical' | 'horizontal';
 }
 
 export interface RelationDesign {

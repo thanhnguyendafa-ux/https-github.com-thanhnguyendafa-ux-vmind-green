@@ -55,11 +55,13 @@ const DEFAULT_TYPOGRAPHY: TypographyDesign = {
   fontWeight: 'bold',
 };
 
+// FIX: Added missing 'layout' property to CardFaceDesign objects.
 const DEFAULT_RELATION_DESIGN: RelationDesign = {
-  front: { backgroundType: 'solid', backgroundValue: '#FFFFFF', gradientAngle: 135, typography: {} },
-  back: { backgroundType: 'solid', backgroundValue: '#F9FAFB', gradientAngle: 135, typography: {} }
+  front: { backgroundType: 'solid', backgroundValue: '#FFFFFF', gradientAngle: 135, typography: {}, layout: 'vertical' },
+  back: { backgroundType: 'solid', backgroundValue: '#F9FAFB', gradientAngle: 135, typography: {}, layout: 'vertical' }
 };
 
+// FIX: Updated data migration function to handle missing layout property and clean up old properties.
 const upgradeRelationDesign = (relation: Relation): Relation => {
     const newRelation = JSON.parse(JSON.stringify(relation));
     if (!newRelation.design) {
@@ -86,6 +88,14 @@ const upgradeRelationDesign = (relation: Relation): Relation => {
         if (faceDesign.backgroundType === 'gradient' && typeof faceDesign.gradientAngle !== 'number') {
             faceDesign.gradientAngle = 135;
         }
+        if (!faceDesign.layout) {
+            faceDesign.layout = 'vertical';
+        }
+        delete (faceDesign as any).color;
+        delete (faceDesign as any).fontSize;
+        delete (faceDesign as any).fontFamily;
+        delete (faceDesign as any).textAlign;
+        delete (faceDesign as any).fontWeight;
     }
     return newRelation;
 };
