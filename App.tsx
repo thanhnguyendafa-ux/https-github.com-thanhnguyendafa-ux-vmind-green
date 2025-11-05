@@ -6,7 +6,7 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import { useDebounce } from './hooks/useDebounce';
 import { supabase } from './services/supabaseClient';
 import { BADGES } from './constants';
-import { generateStudySession } from '../utils/studySessionGenerator';
+import { generateStudySession } from './utils/studySessionGenerator';
 import HomeScreen from './components/HomeScreen';
 import TablesScreen from './components/TablesScreen';
 import TableScreen from './components/TableScreen';
