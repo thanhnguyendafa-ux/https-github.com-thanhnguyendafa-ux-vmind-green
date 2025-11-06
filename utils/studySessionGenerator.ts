@@ -1,4 +1,4 @@
-import { Table, Question, VocabRow, StudySettings, StudyMode, Relation } from '../types';
+import { Table, Question, VocabRow, StudySettings, StudyMode, Relation, ScrambleSessionSettings, ScrambleQuestion } from '../types';
 
 function shuffleArray<T>(array: T[]): T[] {
   const newArray = [...array];
@@ -265,5 +265,55 @@ export function generateStudySession(tables: Table[], settings: StudySettings): 
         }
     }
     
+    return shuffleArray(questions);
+}
+
+// --- New: Scramble Session Generator ---
+
+export function generateScrambleSession(tables: Table[], settings: ScrambleSessionSettings): ScrambleQuestion[] {
+    const questions: ScrambleQuestion[] = [];
+    const tablesById = new Map(tables.map(t => [t.id, t]));
+
+    const candidateRows = new Map<string, VocabRow>();
+    for (const source of settings.sources) {
+        const table = tablesById.get(source.tableId);
+        if (table) {
+            table.rows.forEach(row => {
+                if (!candidateRows.has(row.id)) {
+                    candidateRows.set(row.id, row);
+                }
+            });
+        }
+    }
+    
+    for (const row of Array.from(candidateRows.values())) {
+        for (const source of settings.sources) {
+            const table = tablesById.get(source.tableId);
+            const relation = table?.relations.find(r => r.id === source.relationId);
+
+            if (table && relation && table.rows.some(r => r.id === row.id)) {
+                const originalSentence = relation.questionColumnIds
+                    .map(id => row.cols[id])
+                    .filter(Boolean)
+                    .join(' / ');
+
+                // Split by space, handling various punctuation attached to words
+                const words = originalSentence.split(/\s+/).filter(Boolean);
+                
+                if (words.length >= settings.splitCount) {
+                    questions.push({
+                        rowId: row.id,
+                        tableId: table.id,
+                        relationId: relation.id,
+                        originalSentence,
+                        scrambledParts: shuffleArray(words),
+                    });
+                    // Only add one question per row from the first matching relation
+                    break;
+                }
+            }
+        }
+    }
+
     return shuffleArray(questions);
 }

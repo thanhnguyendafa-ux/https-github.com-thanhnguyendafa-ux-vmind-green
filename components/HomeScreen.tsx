@@ -107,7 +107,7 @@ const HomeScreen: React.FC = () => {
   }, [tables]);
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto animate-fadeIn">
+    <div className="p-4 sm:p-6 mx-auto animate-fadeIn">
       <header className="mb-6 flex justify-between items-center gap-4">
         <div className="flex-1">
           <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-teal-500">Vmind</h1>

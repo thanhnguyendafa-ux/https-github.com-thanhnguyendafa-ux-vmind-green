@@ -13,6 +13,13 @@ export enum Screen {
   Flashcards, // New screen for flashcard setup
   FlashcardSession, // New screen for active flashcard session
   StudySetup,
+  ScrambleSetup,
+  ScrambleSession,
+  TheaterSetup,
+  TheaterSession,
+  Dictation,
+  DictationEditor,
+  DictationSession,
 }
 
 export type Theme = 'light' | 'dark';
@@ -40,12 +47,20 @@ export interface TypographyDesign {
   fontWeight: 'normal' | 'bold';
 }
 
+export interface TextBox {
+  id: string;
+  text: string;
+  typography: TypographyDesign;
+}
+
 export interface CardFaceDesign {
   backgroundType: 'solid' | 'gradient' | 'image';
   backgroundValue: string;
   gradientAngle: number;
   typography: Record<string, TypographyDesign>; // Maps columnId to its style
   layout: 'vertical' | 'horizontal';
+  textBoxes?: TextBox[];
+  elementOrder?: string[];
 }
 
 export interface RelationDesign {
@@ -94,6 +109,9 @@ export interface VocabRow {
     isFlashcardReviewed: boolean;
     lastPracticeDate: number | null;
     wasQuit?: boolean; // For QuitQueue logic
+    scrambleEncounters?: number;
+    scrambleRatings?: Partial<Record<FlashcardStatus, number>>;
+    theaterEncounters?: number;
   };
 }
 
@@ -146,6 +164,33 @@ export interface Note {
   createdAt: number;
 }
 
+// --- New: Dictation Types ---
+export interface TranscriptEntry {
+  text: string;
+  start: number;
+  duration: number;
+}
+
+export interface DictationPracticeRecord {
+  timestamp: number;
+  accuracy: number; // 0-1
+  durationSeconds: number;
+}
+
+export interface DictationNote {
+  id: string;
+  title: string;
+  youtubeUrl: string;
+  transcript: TranscriptEntry[];
+  practiceHistory: DictationPracticeRecord[];
+}
+
+export interface DictationSessionData {
+    note: DictationNote;
+    startTime: number;
+}
+
+
 export interface AppSettings {
   journalMode: 'manual' | 'automatic';
   // Future settings can be added here
@@ -156,6 +201,7 @@ export interface AppState {
     folders: Folder[];
     stats: UserStats;
     notes: Note[];
+    dictationNotes: DictationNote[];
     settings: AppSettings;
     savedFlashcardQueues?: Record<string, string[]>; // key: tableIds|relationIds, value: rowId[]
 }
@@ -232,4 +278,42 @@ export interface StudySettings {
     
     // Criteria Mode specific
     criteriaSorts?: CriteriaSort[];
+}
+
+// --- New: Sentence Scramble Types ---
+export interface ScrambleQuestion {
+  rowId: string;
+  tableId: string;
+  relationId: string;
+  originalSentence: string;
+  scrambledParts: string[];
+}
+
+export interface ScrambleSessionSettings {
+  sources: StudySource[];
+  splitCount: number;
+  interactionMode: 'click' | 'typing';
+}
+
+export interface ScrambleSessionData {
+  settings: ScrambleSessionSettings;
+  queue: ScrambleQuestion[];
+  currentIndex: number;
+  startTime: number;
+  history: { rowId: string; status: FlashcardStatus; timestamp: number }[];
+}
+
+// --- New: Theater Mode Types ---
+export interface TheaterSessionSettings {
+    sources: StudySource[];
+    partDelay: number; // in milliseconds
+    cardInterval: number; // in milliseconds
+    sessionDuration: number; // in minutes, 0 for unlimited
+}
+
+export interface TheaterSessionData {
+    settings: TheaterSessionSettings;
+    queue: string[]; // array of rowIds
+    startTime: number;
+    history: { rowId: string; timestamp: number }[];
 }

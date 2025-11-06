@@ -327,7 +327,7 @@ const TablesScreen: React.FC = () => {
     };
 
     return (
-        <div className="p-4 sm:p-6 max-w-6xl mx-auto animate-fadeIn">
+        <div className="p-4 sm:p-6 mx-auto animate-fadeIn">
             <header className="flex flex-wrap items-center justify-between gap-4 mb-6">
                 <div className="flex items-center gap-2">
                      {currentFolderId && (

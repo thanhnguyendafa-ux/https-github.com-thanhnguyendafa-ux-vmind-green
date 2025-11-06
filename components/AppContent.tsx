@@ -20,6 +20,14 @@ import StudySetupScreen from './StudySetupScreen';
 import Toast from './Toast';
 import JournalScreen from './JournalScreen';
 import GalleryViewModal from './GalleryViewModal';
+import ScrambleSetupScreen from './ScrambleSetupScreen';
+import ScrambleSessionScreen from './ScrambleSessionScreen';
+import TheaterSetupScreen from './TheaterSetupScreen';
+import TheaterSessionScreen from './TheaterSessionScreen';
+import DictationScreen from './DictationScreen';
+import DictationEditorScreen from './DictationEditorScreen';
+import DictationSessionScreen from './DictationSessionScreen';
+
 
 export const AppContent: React.FC = () => {
     const {
@@ -27,6 +35,10 @@ export const AppContent: React.FC = () => {
         currentScreen,
         activeFlashcardSession,
         activeSession,
+        activeScrambleSession,
+        activeTheaterSession,
+        activeDictationSession,
+        editingDictationNote,
         activeTable,
         unlockedBadgeNotification,
         setUnlockedBadgeNotification,
@@ -41,10 +53,18 @@ export const AppContent: React.FC = () => {
     }
 
     const renderContent = () => {
+        if (activeDictationSession) {
+            return <DictationSessionScreen />;
+        }
+        if (activeTheaterSession) {
+            return <TheaterSessionScreen />;
+        }
+        if (activeScrambleSession) {
+            return <ScrambleSessionScreen />;
+        }
         if (activeFlashcardSession) {
             return <FlashcardSessionScreen />
         }
-
         if (activeSession) {
             return <StudySessionScreen session={activeSession} />
         }
@@ -60,13 +80,18 @@ export const AppContent: React.FC = () => {
             case Screen.TableDetail: return activeTable ? <TableScreen table={activeTable} /> : <TablesScreen />;
             case Screen.Flashcards: return <FlashcardsScreen />;
             case Screen.StudySetup: return <StudySetupScreen />
+            case Screen.ScrambleSetup: return <ScrambleSetupScreen />
+            case Screen.TheaterSetup: return <TheaterSetupScreen />
             case Screen.Reading: return <ReadingScreen />
             case Screen.Journal: return <JournalScreen />
+            case Screen.Dictation: return <DictationScreen />
+            case Screen.DictationEditor: return editingDictationNote ? <DictationEditorScreen /> : <DictationScreen />;
+            case Screen.DictationSession: return activeDictationSession ? <DictationSessionScreen /> : <DictationScreen />;
             default: return <HomeScreen />;
         }
     };
 
-    const showNavBar = currentScreen !== Screen.Auth && currentScreen !== Screen.StudySession && !activeFlashcardSession;
+    const showNavBar = currentScreen !== Screen.Auth && !activeSession && !activeFlashcardSession && !activeScrambleSession && !activeTheaterSession && !activeDictationSession;
 
     return (
         <div className="min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 transition-colors duration-300">

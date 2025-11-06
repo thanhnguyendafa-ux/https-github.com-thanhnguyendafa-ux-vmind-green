@@ -28,11 +28,28 @@
         0%, 100% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0); }
         50% { box-shadow: 0 0 8px 2px rgba(6, 182, 212, 0.4); }
     }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideOutLeft {
+      from { opacity: 1; transform: translateX(0); }
+      to { opacity: 0; transform: translateX(-25%); }
+    }
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(25%); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
     .animate-fadeIn { animation: fadeIn 0.5s ease-out forwards; }
     .animate-slideInUp { animation: slideInUp 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
     .animate-pulse-bg { animation: pulse-bg 2s infinite; }
     .animate-shake { animation: shake 0.3s ease-in-out; }
     .animate-ai-glow { animation: ai-glow 2.5s infinite; }
+    .animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+    .animate-slide-out-left { animation: slideOutLeft 0.4s ease-in forwards; }
+    .animate-slide-in-right { animation: slideInRight 0.4s ease-out forwards; }
+
 
     .perspective-1000 { perspective: 1000px; }
     .transform-style-3d { transform-style: preserve-3d; }

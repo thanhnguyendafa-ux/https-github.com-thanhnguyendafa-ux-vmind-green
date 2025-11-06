@@ -61,7 +61,7 @@ const JournalScreen: React.FC = () => {
   }, [notes]);
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto animate-fadeIn">
+    <div className="p-4 sm:p-6 mx-auto animate-fadeIn">
       <header className="flex items-center gap-3 mb-6">
         <button onClick={() => setCurrentScreen(Screen.Vmind)} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500">
           <Icon name="arrowLeft" className="w-6 h-6" />

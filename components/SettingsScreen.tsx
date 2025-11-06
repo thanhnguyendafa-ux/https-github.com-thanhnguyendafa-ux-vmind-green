@@ -13,7 +13,7 @@ const SettingsScreen: React.FC = () => {
   } = useAppContext();
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto animate-fadeIn">
+    <div className="p-4 sm:p-6 mx-auto animate-fadeIn">
       <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-6">Settings</h1>
       
       <div className="space-y-6">

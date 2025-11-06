@@ -26,7 +26,7 @@ const RewardsScreen: React.FC = () => {
   const progressPercentage = (currentLevelXp / XP_PER_LEVEL) * 100;
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto animate-fadeIn">
+    <div className="p-4 sm:p-6 mx-auto animate-fadeIn">
       <div className="flex items-center mb-6">
         <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Progress & Rewards</h1>
       </div>

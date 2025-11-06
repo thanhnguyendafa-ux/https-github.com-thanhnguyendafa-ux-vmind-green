@@ -1,16 +1,20 @@
 import * as React from 'react';
 import { Session } from '@supabase/supabase-js';
-import { Screen, Table, UserStats, StudySessionData, Question, Badge, Theme, AppState, SyncStatus, Note, VocabRow, Folder, Column, FlashcardSession, FlashcardStatus, SessionWordResult, StudySettings, AppSettings, StudyMode, Relation } from '../types';
+import { Screen, Table, UserStats, StudySessionData, Question, Badge, Theme, AppState, SyncStatus, Note, VocabRow, Folder, Column, FlashcardSession, FlashcardStatus, SessionWordResult, StudySettings, AppSettings, StudyMode, Relation, ScrambleSessionData, ScrambleSessionSettings, TheaterSessionData, TheaterSessionSettings, DictationNote, DictationSessionData, DictationPracticeRecord, TranscriptEntry } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useDebounce } from '../hooks/useDebounce';
 import { supabase } from '../services/supabaseClient';
 import { BADGES } from '../constants';
-import { generateStudySession } from '../utils/studySessionGenerator';
+import { generateStudySession, generateScrambleSession } from '../utils/studySessionGenerator';
 
 const XP_PER_CORRECT_ANSWER = 10;
 const XP_QUIT_PENALTY = 15;
 const XP_PER_LEVEL = 1000;
 const XP_PER_FLASHCARD_REVIEW = 5;
+const XP_PER_SCRAMBLE_CORRECT = 15;
+const XP_PER_MINUTE_THEATER = 20;
+const XP_PER_DICTATION_CORRECT = 8;
+
 
 const defaultSolarSystemTable: Table = {
     id: 'default-solar-system',
@@ -52,7 +56,19 @@ const defaultSettings: AppSettings = {
     journalMode: 'manual',
 };
 
-const defaultState: AppState = { tables: [defaultSolarSystemTable], folders: [], stats: defaultStats, notes: [], settings: defaultSettings, savedFlashcardQueues: {} };
+const defaultDictationNote: DictationNote = {
+    id: 'default-dictation-1',
+    title: 'My First Dictation Exercise',
+    youtubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    transcript: [
+        { text: "We're no strangers to love", start: 43, duration: 4 },
+        { text: "You know the rules and so do I", start: 47, duration: 4 },
+        { text: "A full commitment's what I'm thinking of", start: 51, duration: 5 },
+    ],
+    practiceHistory: [],
+};
+
+const defaultState: AppState = { tables: [defaultSolarSystemTable], folders: [], stats: defaultStats, notes: [], dictationNotes: [defaultDictationNote], settings: defaultSettings, savedFlashcardQueues: {} };
 
 interface AppContextType {
     // State
@@ -68,12 +84,17 @@ interface AppContextType {
     folders: Folder[];
     stats: UserStats;
     notes: Note[];
+    dictationNotes: DictationNote[];
     settings: AppSettings;
     
     // Active items
     activeTable: Table | undefined;
     activeSession: StudySessionData | null;
     activeFlashcardSession: FlashcardSession | null;
+    activeScrambleSession: ScrambleSessionData | null;
+    activeTheaterSession: TheaterSessionData | null;
+    activeDictationSession: DictationSessionData | null;
+    editingDictationNote: DictationNote | null;
     galleryViewData: { table: Table; initialRowId?: string } | null;
     
     // UI State & Setters
@@ -109,7 +130,17 @@ interface AppContextType {
     handleSessionQuit: (results: SessionWordResult[], durationSeconds: number, remainingQueue: Question[]) => void;
     handleStartFlashcardSession: (tableIds: string[], relationIds: string[]) => void;
     handleFinishFlashcardSession: (finalSession: FlashcardSession) => void;
+    handleStartScrambleSession: (settings: ScrambleSessionSettings) => void;
+    handleFinishScrambleSession: (finalSession: ScrambleSessionData) => void;
+    handleStartTheaterSession: (settings: TheaterSessionSettings) => void;
+    handleFinishTheaterSession: (finalSession: TheaterSessionData) => void;
     handleOpenGalleryView: (table: Table, initialRowId?: string) => void;
+    handleCreateDictationNote: (title: string) => void;
+    handleUpdateDictationNote: (updatedNote: DictationNote) => void;
+    handleDeleteDictationNote: (noteId: string) => void;
+    handleStartDictationSession: (note: DictationNote) => void;
+    handleFinishDictationSession: (session: DictationSessionData, results: { correct: number, total: number }) => void;
+    setEditingDictationNote: React.Dispatch<React.SetStateAction<DictationNote | null>>;
 }
 
 const AppContext = React.createContext<AppContextType | null>(null);
@@ -128,6 +159,7 @@ export const AppProvider: React.FC<{children: React.ReactNode}> = ({ children })
     const folders = isGuest ? localState.folders : appState.folders;
     const stats = isGuest ? localState.stats : appState.stats;
     const notes = isGuest ? localState.notes : appState.notes;
+    const dictationNotes = isGuest ? localState.dictationNotes : appState.dictationNotes;
     const settings = isGuest ? localState.settings : appState.settings;
     const savedFlashcardQueues = isGuest ? localState.savedFlashcardQueues : appState.savedFlashcardQueues;
     const setState = isGuest ? setLocalState : setAppState;
@@ -138,6 +170,10 @@ export const AppProvider: React.FC<{children: React.ReactNode}> = ({ children })
     const [activeTableId, setActiveTableId] = React.useState<string | null>(null);
     const [activeSession, setActiveSession] = React.useState<StudySessionData | null>(null);
     const [activeFlashcardSession, setActiveFlashcardSession] = React.useState<FlashcardSession | null>(null);
+    const [activeScrambleSession, setActiveScrambleSession] = React.useState<ScrambleSessionData | null>(null);
+    const [activeTheaterSession, setActiveTheaterSession] = React.useState<TheaterSessionData | null>(null);
+    const [activeDictationSession, setActiveDictationSession] = React.useState<DictationSessionData | null>(null);
+    const [editingDictationNote, setEditingDictationNote] = React.useState<DictationNote | null>(null);
     const [galleryViewData, setGalleryViewData] = React.useState<{ table: Table; initialRowId?: string } | null>(null);
     const [unlockedBadgeNotification, setUnlockedBadgeNotification] = React.useState<Badge | null>(null);
     const [toast, setToast] = React.useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -169,6 +205,7 @@ export const AppProvider: React.FC<{children: React.ReactNode}> = ({ children })
             if (data && data.app_data) {
                 const fetchedState = data.app_data as AppState;
                 fetchedState.notes = fetchedState.notes || [];
+                fetchedState.dictationNotes = fetchedState.dictationNotes || [];
                 fetchedState.folders = fetchedState.folders || [];
                 fetchedState.settings = { ...defaultSettings, ...(fetchedState.settings || {}) };
                 fetchedState.savedFlashcardQueues = fetchedState.savedFlashcardQueues || {};
@@ -296,6 +333,221 @@ export const AppProvider: React.FC<{children: React.ReactNode}> = ({ children })
         });
         setActiveFlashcardSession(null); setCurrentScreen(Screen.Flashcards);
     };
+
+    const handleStartScrambleSession = React.useCallback((settings: ScrambleSessionSettings) => {
+        const questions = generateScrambleSession(tables, settings);
+        if (questions.length === 0) {
+            showToast("No sentences found matching your criteria.", "error");
+            return;
+        }
+        setActiveScrambleSession({
+            settings,
+            queue: questions,
+            currentIndex: 0,
+            startTime: Date.now(),
+            history: [],
+        });
+        setCurrentScreen(Screen.ScrambleSession);
+    }, [tables]);
+
+    const handleFinishScrambleSession = (finalSession: ScrambleSessionData) => {
+        const sessionDurationSeconds = Math.round((Date.now() - finalSession.startTime) / 1000);
+        const todayStr = new Date().toISOString().split('T')[0];
+        
+        setAndMarkDirty(prev => {
+            const updatedTables = [...prev.tables];
+            finalSession.history.forEach(hist => {
+                for (const table of updatedTables) {
+                    const rowIndex = table.rows.findIndex(r => r.id === hist.rowId);
+                    if (rowIndex > -1) {
+                        const row = table.rows[rowIndex];
+                        const newStats = { ...row.stats };
+                        newStats.scrambleEncounters = (newStats.scrambleEncounters || 0) + 1;
+                        if (!newStats.scrambleRatings) newStats.scrambleRatings = {};
+                        newStats.scrambleRatings[hist.status] = (newStats.scrambleRatings[hist.status] || 0) + 1;
+                        table.rows[rowIndex] = { ...row, stats: newStats };
+                        break;
+                    }
+                }
+            });
+            
+            const correctAnswers = finalSession.history.filter(h => h.status !== FlashcardStatus.Again && h.status !== FlashcardStatus.Hard).length;
+            const xpGained = correctAnswers * XP_PER_SCRAMBLE_CORRECT;
+            
+            const newXp = prev.stats.xp + xpGained;
+            const newLevel = Math.floor(newXp / XP_PER_LEVEL) + 1;
+            const newActivity = { ...prev.stats.activity, [todayStr]: (prev.stats.activity[todayStr] || 0) + sessionDurationSeconds };
+            const newTotalTime = prev.stats.totalStudyTimeSeconds + sessionDurationSeconds;
+            
+            return { ...prev, tables: updatedTables, stats: { ...prev.stats, xp: newXp, level: newLevel, activity: newActivity, totalStudyTimeSeconds: newTotalTime, } };
+        });
+        
+        setActiveScrambleSession(null);
+        setCurrentScreen(Screen.Vmind);
+    };
+
+    const handleStartTheaterSession = (settings: TheaterSessionSettings) => {
+        const allRowIds = tables
+            .filter(t => settings.sources.some(s => s.tableId === t.id))
+            .flatMap(t => t.rows)
+            .map(r => r.id);
+
+        if (allRowIds.length === 0) {
+            showToast("No cards available in selected tables.", "error");
+            return;
+        }
+
+        setActiveTheaterSession({
+            settings,
+            queue: shuffleArray(allRowIds),
+            startTime: Date.now(),
+            history: [],
+        });
+        setCurrentScreen(Screen.TheaterSession);
+    };
+
+    const handleFinishTheaterSession = (finalSession: TheaterSessionData) => {
+        const sessionDurationSeconds = Math.round((Date.now() - finalSession.startTime) / 1000);
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        // This pattern allows us to check for newly unlocked badges after the state update
+        const oldStats = latestStateRef.current.stats;
+        let finalStats: UserStats | null = null;
+        
+        setAndMarkDirty(prev => {
+            const updatedTables = [...prev.tables];
+            const viewedRowIds = new Set(finalSession.history.map(h => h.rowId));
+            
+            viewedRowIds.forEach(rowId => {
+                for (const table of updatedTables) {
+                    const rowIndex = table.rows.findIndex(r => r.id === rowId);
+                    if (rowIndex > -1) {
+                        const row = table.rows[rowIndex];
+                        const newStats = { ...row.stats };
+                        newStats.theaterEncounters = (newStats.theaterEncounters || 0) + 1;
+                        table.rows[rowIndex] = { ...row, stats: newStats };
+                        break;
+                    }
+                }
+            });
+            
+            const minutesStudied = Math.floor(sessionDurationSeconds / 60);
+            const xpGained = minutesStudied * XP_PER_MINUTE_THEATER;
+            
+            const newXp = prev.stats.xp + xpGained;
+            const newLevel = Math.floor(newXp / XP_PER_LEVEL) + 1;
+            const newActivity = { ...prev.stats.activity, [todayStr]: (prev.stats.activity[todayStr] || 0) + sessionDurationSeconds };
+            const newTotalTime = prev.stats.totalStudyTimeSeconds + sessionDurationSeconds;
+            const newUnlockedBadges = [...prev.stats.unlockedBadges];
+
+            // We calculate the new badges here but don't trigger the notification side-effect
+            BADGES.forEach(badge => {
+                if (!newUnlockedBadges.includes(badge.id) &&
+                    ((badge.type === 'xp' && newXp >= badge.value) || (badge.type === 'time' && newTotalTime >= badge.value))) {
+                    newUnlockedBadges.push(badge.id);
+                }
+            });
+
+            finalStats = {
+                 ...prev.stats,
+                 xp: newXp,
+                 level: newLevel,
+                 activity: newActivity,
+                 totalStudyTimeSeconds: newTotalTime,
+                 unlockedBadges: newUnlockedBadges,
+            };
+            
+            return { ...prev, tables: updatedTables, stats: finalStats };
+        });
+
+        // After the state update is queued, we can check for badges and trigger notifications
+        if (finalStats) {
+            const newlyUnlocked = finalStats.unlockedBadges.filter(b => !oldStats.unlockedBadges.includes(b));
+            if (newlyUnlocked.length > 0) {
+                const badgeToShow = BADGES.find(b => b.id === newlyUnlocked[0]);
+                if (badgeToShow) {
+                    setUnlockedBadgeNotification(badgeToShow);
+                }
+            }
+        }
+        
+        setActiveTheaterSession(null);
+        setCurrentScreen(Screen.Vmind);
+    };
+
+    // --- DICTATION HANDLERS ---
+    const handleCreateDictationNote = (title: string) => {
+        const newNote: DictationNote = {
+            id: `dict-${Date.now()}`,
+            title,
+            youtubeUrl: '',
+            transcript: [],
+            practiceHistory: [],
+        };
+        setAndMarkDirty(prev => ({...prev, dictationNotes: [...prev.dictationNotes, newNote]}));
+        setEditingDictationNote(newNote);
+        setCurrentScreen(Screen.DictationEditor);
+    };
+    
+    const handleUpdateDictationNote = (updatedNote: DictationNote) => {
+        setAndMarkDirty(prev => ({
+            ...prev,
+            dictationNotes: prev.dictationNotes.map(n => n.id === updatedNote.id ? updatedNote : n)
+        }));
+    };
+    
+    const handleDeleteDictationNote = (noteId: string) => {
+        setAndMarkDirty(prev => ({
+            ...prev,
+            dictationNotes: prev.dictationNotes.filter(n => n.id !== noteId)
+        }));
+    };
+
+    const handleStartDictationSession = (note: DictationNote) => {
+        setActiveDictationSession({ note, startTime: Date.now() });
+        setCurrentScreen(Screen.DictationSession);
+    };
+
+    const handleFinishDictationSession = (session: DictationSessionData, results: { correct: number, total: number }) => {
+        const sessionDurationSeconds = Math.round((Date.now() - session.startTime) / 1000);
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        setAndMarkDirty(prev => {
+            const newRecord: DictationPracticeRecord = {
+                timestamp: Date.now(),
+                accuracy: results.total > 0 ? results.correct / results.total : 0,
+                durationSeconds: sessionDurationSeconds,
+            };
+
+            const updatedNotes = prev.dictationNotes.map(n => {
+                if (n.id === session.note.id) {
+                    return { ...n, practiceHistory: [...n.practiceHistory, newRecord] };
+                }
+                return n;
+            });
+
+            const xpGained = results.correct * XP_PER_DICTATION_CORRECT;
+            const newXp = prev.stats.xp + xpGained;
+            const newLevel = Math.floor(newXp / XP_PER_LEVEL) + 1;
+            const newActivity = { ...prev.stats.activity, [todayStr]: (prev.stats.activity[todayStr] || 0) + sessionDurationSeconds };
+            const newTotalTime = prev.stats.totalStudyTimeSeconds + sessionDurationSeconds;
+
+            return {
+                ...prev,
+                dictationNotes: updatedNotes,
+                stats: {
+                    ...prev.stats,
+                    xp: newXp,
+                    level: newLevel,
+                    activity: newActivity,
+                    totalStudyTimeSeconds: newTotalTime,
+                }
+            };
+        });
+
+        setActiveDictationSession(null);
+        setCurrentScreen(Screen.Dictation);
+    };
   
     const handleNavigation = (screen: keyof typeof Screen) => { const screenEnum = Screen[screen]; if (screenEnum !== undefined) { setCurrentScreen(screenEnum); } }
     
@@ -305,8 +557,8 @@ export const AppProvider: React.FC<{children: React.ReactNode}> = ({ children })
 
     const contextValue: AppContextType = {
         session, isGuest, loading, theme, currentScreen, syncStatus,
-        tables, folders, stats, notes, settings,
-        activeTable, activeSession, activeFlashcardSession, galleryViewData,
+        tables, folders, stats, notes, dictationNotes, settings,
+        activeTable, activeSession, activeFlashcardSession, activeScrambleSession, activeTheaterSession, activeDictationSession, editingDictationNote, galleryViewData,
         unlockedBadgeNotification, setUnlockedBadgeNotification,
         toast, setToast, showToast, setGalleryViewData,
         setCurrentScreen, handleNavigation, handleGuestLogin, handleLogout, handleToggleTheme,
@@ -315,7 +567,11 @@ export const AppProvider: React.FC<{children: React.ReactNode}> = ({ children })
         handleDeleteFolder, handleMoveTableToFolder, handleCreateNote, handleUpdateNote,
         handleDeleteNote, handleSaveToJournal, handleStartStudySession, handleEndSession,
         handleSessionQuit, handleStartFlashcardSession, handleFinishFlashcardSession,
-        handleOpenGalleryView
+        handleStartScrambleSession, handleFinishScrambleSession,
+        handleStartTheaterSession, handleFinishTheaterSession,
+        handleOpenGalleryView, handleCreateDictationNote, handleUpdateDictationNote,
+        handleDeleteDictationNote, handleStartDictationSession, handleFinishDictationSession,
+        setEditingDictationNote,
     };
 
     return (
